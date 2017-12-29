@@ -10,13 +10,13 @@ class BacktrackSolver {
     private hiddenTupleCount:number[];
     private hiddenTuplesByCnt:ExtArray<number>[];
     
-    private candidatesChangedSetCell:CandidatesModifiedFn;
-    private candidatesChangedUnSetCell:CandidatesModifiedFn;
+    private candidatesChanged_Removed:CandidatesModifiedFn;
+    private candidatesChanged_Added:CandidatesModifiedFn;
 
     constructor (private board:Board) {
         this.fillCountTables(board);
-        this.candidatesChangedSetCell = this.candidatesChanged.bind(this, -1);
-        this.candidatesChangedUnSetCell = this.candidatesChanged.bind(this, 1);
+        this.candidatesChanged_Removed = this.candidatesChanged.bind(this, -1);
+        this.candidatesChanged_Added = this.candidatesChanged.bind(this, 1);
     }
 
     fillCountTables(board:Board) {
@@ -45,13 +45,27 @@ class BacktrackSolver {
         const count = this.board.candidatesTable[cell].count;
         this.removeCellFromCBCC(cell, count);
         this.updateHiddenTupleCountForCell(cell, -1);
-        this.board.setCell(cell, digit, this.candidatesChangedSetCell);
+        this.board.setCell(cell, digit, this.candidatesChanged_Removed);
     }
 
     unSetCell(cell:number) {
-        this.board.unSetCell(cell, this.candidatesChangedUnSetCell);
+        this.board.unSetCell(cell, this.candidatesChanged_Added);
         this.addCellToCBCC(cell);
         this.updateHiddenTupleCountForCell(cell, 1);
+    }
+
+    clearCell(cell:number) {
+        const modified = this.board.clearCell(cell, this.candidatesChanged_Added);
+        this.addCellToCBCC(cell);
+        this.updateHiddenTupleCountForCell(cell, 1);
+        return modified;
+    }
+
+    unClearCell(cell:number, modified:number) {
+        const count = this.board.candidatesTable[cell].count;
+        this.removeCellFromCBCC(cell, count);
+        this.updateHiddenTupleCountForCell(cell, -1);
+        this.board.unClearCell(cell, modified, this.candidatesChanged_Removed);
     }
 
     private solutionCount:number;
@@ -65,13 +79,12 @@ class BacktrackSolver {
         return this.solutionCount;
     }
 
-    private solveNextCell() {
+    private solveNextCell(cnum = 0) {
         if (++this.callCounter > 1000) {    // to avoid very long solve times...
             this.solutionCount = -1;
             return;
         }
 
-        let cnum = 0;
         while (cnum <= 9 && this.cellsByCandidateCnt[cnum].length === 0) cnum++;
         if (cnum === 0) return; // there is a cell with 0 candidates => no solution
         if (cnum === 10) {
@@ -82,13 +95,13 @@ class BacktrackSolver {
         let htnum = 1;
         while (htnum <= 9 && this.hiddenTuplesByCnt[htnum].length === 0) htnum++;
 
-        if (cnum < htnum) {
+        if (cnum <= htnum) {
             const cell = this.cellsByCandidateCnt[cnum].pop();
             this.updateHiddenTupleCountForCell(cell, -1);
             for (const digit of this.board.candidatesTable[cell]) {
-                this.board.setCell(cell, digit, this.candidatesChangedSetCell);
-                this.solveNextCell();
-                this.board.unSetCell(cell, this.candidatesChangedUnSetCell);
+                this.board.setCell(cell, digit, this.candidatesChanged_Removed);
+                this.solveNextCell(cnum-1);
+                this.board.unSetCell(cell, this.candidatesChanged_Added);
                 if (this.solutionCount > 1) break;
             }
             this.updateHiddenTupleCountForCell(cell, 1);
@@ -105,9 +118,9 @@ class BacktrackSolver {
                     this.removeCellFromCBCC(cell, this.board.candidatesTable[cell].count);
                     this.updateHiddenTupleCountForCell(cell, -1);
 
-                    this.board.setCell(cell, digit, this.candidatesChangedSetCell);
-                    this.solveNextCell();
-                    this.board.unSetCell(cell, this.candidatesChangedUnSetCell);
+                    this.board.setCell(cell, digit, this.candidatesChanged_Removed);
+                    this.solveNextCell(cnum-1);
+                    this.board.unSetCell(cell, this.candidatesChanged_Added);
 
                     this.updateHiddenTupleCountForCell(cell, 1);
                     this.addCellToCBCC(cell);

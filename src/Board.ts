@@ -13,7 +13,7 @@ class Board {
     private container: HTMLElement;
     public candidatesTable: Candidates[];
 	public numCellsSolved:number;
-	private modifiedCandidates:number[];
+	public modifiedCandidates:number[];
 
 	constructor(board?:string|number[]|Board) {
         if (board instanceof Board) {
@@ -23,6 +23,7 @@ class Board {
 			this.numCellsSolved = board.numCellsSolved;
         } else {
 			this.table = this.checkTableErrors(board) || Array(9*9).fill(0);
+			this.modifiedCandidates = Array(9*9).fill(0);
             this.calcCandidates();
         }
 	}
@@ -30,7 +31,7 @@ class Board {
 	private checkTableErrors(table) {
 		if (!table) return;
 		if (typeof table === 'string') {
-			table = table.replace(/[^\d]/g, '').split('').map(d => parseInt(d));
+			table = table.replace(/[^\d]/g, '').split('').map(d => parseInt(d, 10));
 		}
 		if (table.length !== 9*9) throw new Error(`Invalid number of elements: ${table.length}`);
 		for (const digit of table) {
@@ -45,8 +46,8 @@ class Board {
         return this.numCellsSolved === 81;
     }
 	
-	render(container?:HTMLElement) {
-		(this.container = container || this.container).innerHTML = 
+	render(container:HTMLElement = this.container) {
+		(this.container = container).innerHTML = 
 			this.renderTable(9, 9, 'main', (i) => this.renderCell(i));
 	}
 	
@@ -99,13 +100,13 @@ class Board {
 	
 	private calcCandidates() {
         this.numCellsSolved = 0;
-		this.modifiedCandidates = Array(9*9).fill(0);
 		// candidatesTable[cell] = { count: number of available candidates, bits: bitmask of which digits are available (1<<digit-1) }
-		this.candidatesTable = this.modifiedCandidates.map((_, cell) => this.table[cell] ? (this.numCellsSolved++, new Candidates(0, 0)) : new Candidates(9, 0x1ff));
+		this.candidatesTable = Array(9*9).fill(0).map((_, cell) => this.table[cell] ? (this.numCellsSolved++, new Candidates(0, 0)) : new Candidates(9, 0x1ff));
 		for (const {blocks} of blockTypes) for (const block of blocks) {
 			let bitmask = 0;
 			for (const cell of block) bitmask |= 1 << this.table[cell];
-			for (const cell of block) this.removeCandidate(cell, bitmask >> 1);
+			bitmask >>= 1;
+			for (const cell of block) this.removeCandidate(cell, bitmask);
 		}
 	}
 	
@@ -182,22 +183,47 @@ class Board {
 	clearCell(cell:number, candidatesModified?:CandidatesModifiedFn) {
 		const digit = this.table[cell];
 		this.table[cell] = 0;
-		this.numCellsSolved--;
-		
+
+		const affectedCells = this.getAffectedCells(cell);
+		const affectedCandidateCnts = affectedCells.map(cell => this.candidatesTable[cell].count);
+
+		this.calcCandidates();	// I don't know any faster way... If you do, let me know!
+
 		const bitmask = 1<<digit-1;
-		let modified = this.modifiedCandidates[cell];
+		let modified = 0, modBit = 1;
+
+		for (let i = 0; i < affectedCells.length; ++i) {
+			const acell = affectedCells[i];
+			const oldCnum = affectedCandidateCnts[i];
+
+			if (this.candidatesTable[acell].count !== oldCnum) { 
+				modified |= modBit; 
+				if (candidatesModified) candidatesModified(acell, oldCnum, digit);
+			}
+			
+			modBit <<= 1; 
+		}
+		this.modifiedCandidates[cell] = 0;	// 
+		return modified | (digit << 20);
+	}
+
+	unClearCell(cell:number, modified:number, candidatesModified?:CandidatesModifiedFn) {
+		const digit = modified >> 20;
+		this.table[cell] = digit;
+		this.numCellsSolved++;
+
+		const bitmask = 1<<digit-1;
 
 		for (const acell of this.getAffectedCells(cell)) {
 			if (modified&1) {
 				const oldCnum = this.candidatesTable[acell].count;
-				this.addCandidate(acell, bitmask);
+				this.removeCandidate(acell, bitmask);
 				if (candidatesModified) candidatesModified(acell, oldCnum, digit);
 			}
 			modified >>= 1;
 		}
 
-		this.candidatesTable[cell].setBits(modified);
-		this.modifiedCandidates[cell] = 0;
+		this.candidatesTable[cell].solved();
 	}
 
 	runRule(ruleFn:RuleFn) {

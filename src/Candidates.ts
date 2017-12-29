@@ -9,22 +9,22 @@ class Candidates {
 	}
 	
 	setBits(bits:number) {
-		this.count = this.bitcount(this.bits = bits);
+		this.count = Candidates.bitcount(this.bits = bits);
 	}
 
 	removeBits(bitmask:number) {
 		if (this.bits & bitmask) {
-			this.count = this.bitcount(this.bits &= ~bitmask);
+			this.count = Candidates.bitcount(this.bits &= ~bitmask);
 			return true;
 		}
 		return false;
 	}
 
 	addBits(bitmask:number) {
-		this.count = this.bitcount(this.bits |= bitmask);
+		this.count = Candidates.bitcount(this.bits |= bitmask);
 	}
 
-	private bitcount(n:number):number {
+	static bitcount(n:number):number {
 		// http://gurmeet.net/puzzles/fast-bit-counting-routines/
 		const tmp = n - ((n >> 1) & 0o33333333333) - ((n >> 2) & 0o11111111111);
 		return ((tmp + (tmp >> 3)) & 0o30707070707) % 63;

@@ -40,9 +40,26 @@ class Generator {
     }
 
     tryRemoveClues() {
-        for (let cell = 0; cell < 81; ++cell) {
-            if (this.board.table[cell]) {
+        let removedOne = false;
+        const board = this.board;
+        const solver = this.solver;
+        const cellsToRemove = [];
 
+        for (let cell = 0; cell < 81; ++cell) {
+            if (board.table[cell]) {
+                cellsToRemove.push([cell, Candidates.bitcount(board.modifiedCandidates[cell])]);
+            }
+        }
+
+        cellsToRemove.sort((a, b) => a[1] - b[1]);
+
+        for (const [cell, candidateCount] of cellsToRemove) {
+            const modified = solver.clearCell(cell);
+            const solutions = solver.solve();
+            if (solutions === 1) {
+                removedOne = true;
+            } else {
+                solver.unClearCell(cell, modified);            
             }
         }
     }
