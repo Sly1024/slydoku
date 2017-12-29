@@ -5,6 +5,6 @@
         "outFile": "dist/slydoku.js"
     },
     "include": [
-        "main.ts"
+        "src/main.ts"
     ]
 }
