@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "target": "es2016",        
+        "sourceMap": true,
+        "outFile": "dist/slydoku.js"
+    },
+    "include": [
+        "main.ts"
+    ]
+}
