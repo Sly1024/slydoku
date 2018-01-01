@@ -40,7 +40,6 @@ class Generator {
     }
 
     tryRemoveClues() {
-        let removedOne = false;
         const board = this.board;
         const solver = this.solver;
         const cellsToRemove = [];
@@ -56,9 +55,7 @@ class Generator {
         for (const [cell, candidateCount] of cellsToRemove) {
             const modified = solver.clearCell(cell);
             const solutions = solver.solve();
-            if (solutions === 1) {
-                removedOne = true;
-            } else {
+            if (solutions !== 1) {
                 solver.unClearCell(cell, modified);            
             }
         }

@@ -7,6 +7,7 @@ class BacktrackSolver {
     public cellsByCandidateCnt:ExtArray<number>[];
 
     // tuples<blockType, blockIdx, digit> grouped by occurrence count
+    // key = blockTypeIdx*81 + blockIdx*9 + digit-1
     private hiddenTupleCount:number[];
     private hiddenTuplesByCnt:ExtArray<number>[];
     
