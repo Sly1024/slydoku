@@ -1,13 +1,14 @@
 /// <reference path="Candidates.ts" />
 /// <reference path="BlockType.ts" />
 /// <reference path="SolveStep.ts" />
+/// <reference path="Observable.ts" />
 
 
 type RuleFn = (board:Board) => SolveStep[];
 
 type CandidatesModifiedFn = (cell:number, oldCnt:number, digit:number)=>void;
 
-class Board {
+class Board extends Observable {
 
     public table: number[];
     private container: HTMLElement;
@@ -16,8 +17,10 @@ class Board {
 	public modifiedCandidates:number[];
 
 	constructor(board?:string|number[]|Board) {
+		super();
         if (board instanceof Board) {
-            this.table = board.table.slice();
+			this.table = board.table.slice();
+			this.container = board.container;
 			this.candidatesTable = board.candidatesTable.map(candi => candi.clone());
 			this.modifiedCandidates = board.modifiedCandidates.slice();
 			this.numCellsSolved = board.numCellsSolved;

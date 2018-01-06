@@ -13,21 +13,32 @@ const measure = (fn) => {
     return performance.now() - time;
 }
 
-let board = new Board(table2);
-board.render($('#container'));
+let board:Board;
+
+const loadSelect = $('#loadTable');
+
+Object.keys(sampleTables).forEach(key => loadSelect.options.add(new Option(key, key)));
+loadSelect.addEventListener('change', () => {
+    board = new Board(sampleTables[loadSelect.value]);
+    board.render($('#container'));
+    console.log(`Loaded "${loadSelect.value}."`);
+});
+
+loadSelect.value = 'generated_hard';
+loadSelect.dispatchEvent(new Event('change'))
 
 $('#validateBtn').addEventListener('click', () => board.checkValidity());
 
 $('#nextBtn').addEventListener('click', () => board.runRulesForNextStep(rules));
 
 $('#backtrackBtn').addEventListener('click', () => {
-    // let board2 = new Board(board);
-    let solutions;
+    let solutions, calls;
     let time = measure(() => {
         let solver = new BacktrackSolver(board);
         solutions = solver.solve();    
+        calls = solver.callCounter;
     });
-    console.log('solutions: ', solutions, 'in', time, 'ms');
+    console.log('solutions: ', solutions, 'in', time, 'ms', calls, 'calls');
     board.render($('#container'));
 });
 
@@ -40,3 +51,14 @@ $('#generateBtn').addEventListener('click', () => {
     board.render($('#container'));
 });
 
+$('#rulesAndSolveBtn').addEventListener('click', () => {
+    let solutions, calls;
+    let time = measure(() => {
+        board.runRulesUntilDone(rules);
+        let solver = new BacktrackSolver(board);
+        solutions = solver.solve();    
+        calls = solver.callCounter;
+    });
+    console.log('solutions: ', solutions, 'in', time, 'ms', calls, 'calls');
+    board.render($('#container'));
+});

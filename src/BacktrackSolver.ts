@@ -70,7 +70,7 @@ class BacktrackSolver {
     }
 
     private solutionCount:number;
-    private callCounter:number;
+    public callCounter:number;
 
     solve() {
         this.callCounter = 0;
