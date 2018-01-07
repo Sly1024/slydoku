@@ -157,5 +157,45 @@ const rules = [
 				}
 			}
 		}
+	}),
+	new Rule('Locked Candidate', (board) => {
+		const candidatesTable = board.candidatesTable;
+
+		function processBlocks(blockType:BlockType, against:BlockType[]) {
+			for (const block of blockType.blocks) {
+				const digitPos:number[][] = Array.from(Array(9), () => []);
+				for (const cell of block) {
+					for (const digit of candidatesTable[cell]) {
+						digitPos[digit-1].push(cell);
+					}
+				}
+	
+				for (let digit = 1; digit <= 9; ++digit) {
+					const positions = digitPos[digit-1];
+					if (positions.length < 2 || positions.length > 3) continue;
+					const digitMask = 1 << digit-1;
+	
+					const firstPos = positions[0];
+					const lastPos = positions[positions.length - 1];
+	
+					for (const againstBlk of against) {
+						const blkIdx = againstBlk.getIdx(firstPos);
+						// same block?
+						if (againstBlk.getIdx(lastPos) === blkIdx && (positions.length < 3 || againstBlk.getIdx(positions[1]) === blkIdx)) {
+							const removes:SolveStep[] = [];
+							for (const cell of againstBlk.blocks[blkIdx]) if (cell < firstPos || cell > lastPos) {
+								if (candidatesTable[cell].bits & digitMask) removes.push(new Remove(cell, digitMask, blockType.name + '->' + againstBlk.name));
+							}
+							if (removes.length) return removes;
+							break;	// only applies in case of box -> [row, col] - if candidates are in the same row, they can't be in the same col
+						}
+					}
+				}
+			}
+		}
+
+		return processBlocks(box, [row, col]) || processBlocks(row, [box]) || processBlocks(col, [box]);
 	})
 ];
+
+
