@@ -195,6 +195,40 @@ const rules = [
 		}
 
 		return processBlocks(box, [row, col]) || processBlocks(row, [box]) || processBlocks(col, [box]);
+	}),
+	new Rule('X-Wing', (board) => {
+		const candidatesTable = board.candidatesTable;
+
+		function findXWing(baseBlk:BlockType, coverBlks:BlockType[]) {
+			for (let digit = 1; digit <= 9; ++digit) {
+				const digitMask = 1 << digit-1;
+				// const found2exactly:{[key:string]:number[]} = {};
+				const found2exactly = Array.from(coverBlks, () => ({}));
+
+				for (const block of baseBlk.blocks) {
+					const positions:number[] = [];
+					for (const cell of block) if (candidatesTable[cell].bits & digitMask) positions.push(cell);
+					if (positions.length === 2) {
+						for (let ci = 0; ci < coverBlks.length; ++ci) {
+							const coverBlk = coverBlks[ci];
+							const blkIdxs = positions.map(coverBlk.getIdx);
+							const key = blkIdxs.join('_');
+							let otherPositions:number[];
+							if (otherPositions = found2exactly[ci][key]) {
+								const except = positions.concat(otherPositions);
+								const removes:SolveStep[] = [];
+								for (const blkIdx of blkIdxs) for (const cell of coverBlk.blocks[blkIdx]) if (!except.includes(cell)) {
+									if (candidatesTable[cell].bits & digitMask) removes.push(new Remove(cell, digitMask, baseBlk.name + '->' + coverBlk.name));
+								}
+								if (removes.length) return removes;
+							} else found2exactly[ci][key] = positions;
+						}
+					}
+				}
+			}
+		}
+
+		return findXWing(row, [col, box]) || findXWing(col, [row, box]) || findXWing(box, [row, col]);
 	})
 ];
 

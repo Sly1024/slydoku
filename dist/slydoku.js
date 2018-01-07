@@ -391,13 +391,14 @@ const sampleTables = {
 
     630 100 000
     004 200 065
-    005 900 080
-`,
+    005 900 080`,
     generated2: '050091000009037000100400000700000058000100027310080900007000030900500004080903600',
     generated4: '600000700530000004400000008054002000000005070002006030000304980049168000000709640',
     generated_hard: '004000007080004050071002000907000000000160000000000045100030600000600300020000080',
     nakedtriple: '600802735702356940300407062100975024200183079079624003400560207067240300920738406',
-    hiddentriple: '500620037004890000000050000930000000020000605700000003000009000000000700680570002'
+    hiddentriple: '500620037004890000000050000930000000020000605700000003000009000000000700680570002',
+    xwing: '041729030769003402032640719403900170607004903195370024214567398376090541958431267',
+    xwing2: '980062753065003000327050006790030500050009000832045009673591428249087005518020007'
 };
 class ExtArray extends Array {
     remove(item) {
@@ -640,6 +641,45 @@ const rules = [
             }
         }
         return processBlocks(box, [row, col]) || processBlocks(row, [box]) || processBlocks(col, [box]);
+    }),
+    new Rule('X-Wing', (board) => {
+        const candidatesTable = board.candidatesTable;
+        function findXWing(baseBlk, coverBlks) {
+            for (let digit = 1; digit <= 9; ++digit) {
+                const digitMask = 1 << digit - 1;
+                // const found2exactly:{[key:string]:number[]} = {};
+                const found2exactly = Array.from(coverBlks, () => ({}));
+                for (const block of baseBlk.blocks) {
+                    const positions = [];
+                    for (const cell of block)
+                        if (candidatesTable[cell].bits & digitMask)
+                            positions.push(cell);
+                    if (positions.length === 2) {
+                        for (let ci = 0; ci < coverBlks.length; ++ci) {
+                            const coverBlk = coverBlks[ci];
+                            const blkIdxs = positions.map(coverBlk.getIdx);
+                            const key = blkIdxs.join('_');
+                            let otherPositions;
+                            if (otherPositions = found2exactly[ci][key]) {
+                                const except = positions.concat(otherPositions);
+                                const removes = [];
+                                for (const blkIdx of blkIdxs)
+                                    for (const cell of coverBlk.blocks[blkIdx])
+                                        if (!except.includes(cell)) {
+                                            if (candidatesTable[cell].bits & digitMask)
+                                                removes.push(new Remove(cell, digitMask, baseBlk.name + '->' + coverBlk.name));
+                                        }
+                                if (removes.length)
+                                    return removes;
+                            }
+                            else
+                                found2exactly[ci][key] = positions;
+                        }
+                    }
+                }
+            }
+        }
+        return findXWing(row, [col, box]) || findXWing(col, [row, box]) || findXWing(box, [row, col]);
     })
 ];
 /// <reference path="Board.ts" />
