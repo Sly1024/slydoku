@@ -647,7 +647,6 @@ const rules = [
         function findXWing(baseBlk, coverBlks) {
             for (let digit = 1; digit <= 9; ++digit) {
                 const digitMask = 1 << digit - 1;
-                // const found2exactly:{[key:string]:number[]} = {};
                 const found2exactly = Array.from(coverBlks, () => ({}));
                 for (const block of baseBlk.blocks) {
                     const positions = [];
