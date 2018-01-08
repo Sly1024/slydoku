@@ -228,6 +228,51 @@ const rules = [
 		}
 
 		return findXWing(row, [col, box]) || findXWing(col, [row, box]) || findXWing(box, [row, col]);
+	}),
+	new Rule('Swordfish', (board) => {
+		const candidatesTable = board.candidatesTable;
+
+		function findSwordfish(baseBlk:BlockType, coverBlk:BlockType) {
+			for (let digit = 1; digit <= 9; ++digit) {
+				const digitMask = 1 << digit-1;
+				const triples = new ExtMap<string, number[][]>(() => []);
+
+				for (const block of baseBlk.blocks) {
+					const positions:number[] = [];
+					for (const cell of block) if (candidatesTable[cell].bits & digitMask) positions.push(cell);
+
+					if (positions.length === 2) {
+						const keyArr = positions.map(coverBlk.getIdx);
+						for (let blkidx = 0; blkidx < 9; ++blkidx) if (blkidx !== keyArr[0] && blkidx !== keyArr[1]) {
+							// we know that keyArr[] is sorted, just need to insert blkidx
+							let idx = 0;
+							const key = keyArr.slice();
+							while (blkidx >= key[idx]) ++idx;
+							key.splice(idx, 0, blkidx);
+							triples.getOrCreate(key.join('_')).push(positions);
+						}
+					} else if (positions.length === 3) {
+						triples.getOrCreate(positions.map(coverBlk.getIdx).join('_')).push(positions);
+					}
+					
+					for (const [keyStr, blocks] of triples) {
+						if (blocks.length === 3) {
+							const removes:SolveStep[] = [];
+							const blkIdxs = keyStr.split('_').map(x => parseInt(x, 10));
+							const except = blocks[0].concat(blocks[1], blocks[2]);	// flatten
+
+							for (const blkIdx of blkIdxs) for (const cell of coverBlk.blocks[blkIdx]) if (!except.includes(cell)) {
+								if (candidatesTable[cell].bits & digitMask) removes.push(new Remove(cell, digitMask, baseBlk.name + '->' + coverBlk.name));
+							}
+
+							if (removes.length) return removes;
+						}
+					}
+				}
+			}
+		}
+
+		return findSwordfish(row, col) || findSwordfish(col, row);
 	})
 ];
 

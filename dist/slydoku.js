@@ -398,7 +398,8 @@ const sampleTables = {
     nakedtriple: '600802735702356940300407062100975024200183079079624003400560207067240300920738406',
     hiddentriple: '500620037004890000000050000930000000020000605700000003000009000000000700680570002',
     xwing: '041729030769003402032640719403900170607004903195370024214567398376090541958431267',
-    xwing2: '980062753065003000327050006790030500050009000832045009673591428249087005518020007'
+    xwing2: '980062753065003000327050006790030500050009000832045009673591428249087005518020007',
+    swordfish: '160543070078601435435807601720458069600912057000376004016030040300080016007164503'
 };
 class ExtArray extends Array {
     remove(item) {
@@ -679,6 +680,53 @@ const rules = [
             }
         }
         return findXWing(row, [col, box]) || findXWing(col, [row, box]) || findXWing(box, [row, col]);
+    }),
+    new Rule('Swordfish', (board) => {
+        const candidatesTable = board.candidatesTable;
+        function findSwordfish(baseBlk, coverBlk) {
+            for (let digit = 1; digit <= 9; ++digit) {
+                const digitMask = 1 << digit - 1;
+                const triples = new ExtMap(() => []);
+                for (const block of baseBlk.blocks) {
+                    const positions = [];
+                    for (const cell of block)
+                        if (candidatesTable[cell].bits & digitMask)
+                            positions.push(cell);
+                    if (positions.length === 2) {
+                        const keyArr = positions.map(coverBlk.getIdx);
+                        for (let blkidx = 0; blkidx < 9; ++blkidx)
+                            if (blkidx !== keyArr[0] && blkidx !== keyArr[1]) {
+                                // we know that keyArr[] is sorted, just need to insert blkidx
+                                let idx = 0;
+                                const key = keyArr.slice();
+                                while (blkidx >= key[idx])
+                                    ++idx;
+                                key.splice(idx, 0, blkidx);
+                                triples.getOrCreate(key.join('_')).push(positions);
+                            }
+                    }
+                    else if (positions.length === 3) {
+                        triples.getOrCreate(positions.map(coverBlk.getIdx).join('_')).push(positions);
+                    }
+                    for (const [keyStr, blocks] of triples) {
+                        if (blocks.length === 3) {
+                            const removes = [];
+                            const blkIdxs = keyStr.split('_').map(x => parseInt(x, 10));
+                            const except = blocks[0].concat(blocks[1], blocks[2]); // flatten
+                            for (const blkIdx of blkIdxs)
+                                for (const cell of coverBlk.blocks[blkIdx])
+                                    if (!except.includes(cell)) {
+                                        if (candidatesTable[cell].bits & digitMask)
+                                            removes.push(new Remove(cell, digitMask, baseBlk.name + '->' + coverBlk.name));
+                                    }
+                            if (removes.length)
+                                return removes;
+                        }
+                    }
+                }
+            }
+        }
+        return findSwordfish(row, col) || findSwordfish(col, row);
     })
 ];
 /// <reference path="Board.ts" />
