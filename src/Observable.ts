@@ -15,9 +15,9 @@ class Observable {
         }
     }
 
-    emit(event:string, data?:any) {
+    emit(event:string, ...args:any[]) {
         const list = this.events[event];
-        if (list) list.forEach(handler => handler(data));
+        if (list) list.forEach(handler => handler.apply(this, args));
     }
 }
 

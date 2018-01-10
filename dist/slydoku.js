@@ -7,17 +7,17 @@ class Candidates {
         this.count = this.bits = 0;
     }
     setBits(bits) {
-        this.count = Candidates.bitcount(this.bits = bits);
-    }
-    removeBits(bitmask) {
-        if (this.bits & bitmask) {
-            this.count = Candidates.bitcount(this.bits &= ~bitmask);
+        if (this.bits !== bits) {
+            this.count = Candidates.bitcount(this.bits = bits);
             return true;
         }
         return false;
     }
+    removeBits(bitmask) {
+        return this.setBits(this.bits & ~bitmask);
+    }
     addBits(bitmask) {
-        this.count = Candidates.bitcount(this.bits |= bitmask);
+        return this.setBits(this.bits | bitmask);
     }
     static bitcount(n) {
         // http://gurmeet.net/puzzles/fast-bit-counting-routines/
@@ -107,10 +107,10 @@ class Observable {
                 list.splice(idx, 1);
         }
     }
-    emit(event, data) {
+    emit(event, ...args) {
         const list = this.events[event];
         if (list)
-            list.forEach(handler => handler(data));
+            list.forEach(handler => handler.apply(this, args));
     }
 }
 class Observer {
@@ -226,14 +226,22 @@ class Board extends Observable {
                     bitmask |= 1 << this.table[cell];
                 bitmask >>= 1;
                 for (const cell of block)
-                    this.removeCandidate(cell, bitmask);
+                    this.candidatesTable[cell].removeBits(bitmask); //this.removeCandidate(cell, bitmask);
             }
     }
+    changeCandidate(cell, bitmask, add) {
+        const candidates = this.candidatesTable[cell];
+        const old = candidates.clone();
+        if (candidates[add ? 'addBits' : 'removeBits'](bitmask)) {
+            this.emit('candidatesChanged', cell, old, candidates);
+            return true;
+        }
+    }
     removeCandidate(cell, bitmask) {
-        return this.candidatesTable[cell].removeBits(bitmask);
+        return this.changeCandidate(cell, bitmask, false);
     }
     addCandidate(cell, bitmask) {
-        this.candidatesTable[cell].addBits(bitmask);
+        return this.changeCandidate(cell, bitmask, true);
     }
     applySolveStep({ op, cell, digit }) {
         if (op === 's') {
@@ -261,6 +269,8 @@ class Board extends Observable {
     setCell(cell, digit, candidatesModified) {
         this.table[cell] = digit;
         this.numCellsSolved++;
+        const candidates = this.candidatesTable[cell];
+        this.emit('cellSet', cell, digit, candidates);
         const bitmask = 1 << digit - 1;
         let modified = 0, modBit = 1;
         for (const acell of this.getAffectedCells(cell)) {
@@ -272,8 +282,8 @@ class Board extends Observable {
             }
             modBit <<= 1;
         }
-        this.modifiedCandidates[cell] = modified | (this.candidatesTable[cell].bits << 20);
-        this.candidatesTable[cell].solved();
+        this.modifiedCandidates[cell] = modified | (candidates.bits << 20);
+        candidates.solved();
     }
     unSetCell(cell, candidatesModified) {
         const digit = this.table[cell];
@@ -290,46 +300,46 @@ class Board extends Observable {
             }
             modified >>= 1;
         }
-        this.candidatesTable[cell].setBits(modified);
+        const candidates = this.candidatesTable[cell];
+        candidates.setBits(modified);
         this.modifiedCandidates[cell] = 0;
+        this.emit('cellUnset', cell, digit, candidates);
     }
-    clearCell(cell, candidatesModified) {
-        const digit = this.table[cell];
-        this.table[cell] = 0;
-        const affectedCells = this.getAffectedCells(cell);
-        const affectedCandidateCnts = affectedCells.map(cell => this.candidatesTable[cell].count);
-        this.calcCandidates(); // I don't know any faster way... If you do, let me know!
-        const bitmask = 1 << digit - 1;
-        let modified = 0, modBit = 1;
-        for (let i = 0; i < affectedCells.length; ++i) {
-            const acell = affectedCells[i];
-            const oldCnum = affectedCandidateCnts[i];
-            if (this.candidatesTable[acell].count !== oldCnum) {
-                modified |= modBit;
-                if (candidatesModified)
-                    candidatesModified(acell, oldCnum, digit);
-            }
-            modBit <<= 1;
-        }
-        this.modifiedCandidates[cell] = 0; // 
-        return modified | (digit << 20);
-    }
-    unClearCell(cell, modified, candidatesModified) {
-        const digit = modified >> 20;
-        this.table[cell] = digit;
-        this.numCellsSolved++;
-        const bitmask = 1 << digit - 1;
-        for (const acell of this.getAffectedCells(cell)) {
-            if (modified & 1) {
-                const oldCnum = this.candidatesTable[acell].count;
-                this.removeCandidate(acell, bitmask);
-                if (candidatesModified)
-                    candidatesModified(acell, oldCnum, digit);
-            }
-            modified >>= 1;
-        }
-        this.candidatesTable[cell].solved();
-    }
+    // clearCell(cell:number, candidatesModified?:CandidatesModifiedFn) {
+    // 	const digit = this.table[cell];
+    // 	this.table[cell] = 0;
+    // 	const affectedCells = this.getAffectedCells(cell);
+    // 	const affectedCandidateCnts = affectedCells.map(cell => this.candidatesTable[cell].count);
+    // 	this.calcCandidates();	// I don't know any faster way... If you do, let me know!
+    // 	const bitmask = 1<<digit-1;
+    // 	let modified = 0, modBit = 1;
+    // 	for (let i = 0; i < affectedCells.length; ++i) {
+    // 		const acell = affectedCells[i];
+    // 		const oldCnum = affectedCandidateCnts[i];
+    // 		if (this.candidatesTable[acell].count !== oldCnum) { 
+    // 			modified |= modBit; 
+    // 			if (candidatesModified) candidatesModified(acell, oldCnum, digit);
+    // 		}
+    // 		modBit <<= 1; 
+    // 	}
+    // 	this.modifiedCandidates[cell] = 0;	// 
+    // 	return modified | (digit << 20);
+    // }
+    // unClearCell(cell:number, modified:number, candidatesModified?:CandidatesModifiedFn) {
+    // 	const digit = modified >> 20;
+    // 	this.table[cell] = digit;
+    // 	this.numCellsSolved++;
+    // 	const bitmask = 1<<digit-1;
+    // 	for (const acell of this.getAffectedCells(cell)) {
+    // 		if (modified&1) {
+    // 			const oldCnum = this.candidatesTable[acell].count;
+    // 			this.removeCandidate(acell, bitmask);
+    // 			if (candidatesModified) candidatesModified(acell, oldCnum, digit);
+    // 		}
+    // 		modified >>= 1;
+    // 	}
+    // 	this.candidatesTable[cell].solved();
+    // }
     runRule(ruleFn) {
         const results = ruleFn(this);
         if (results) {
@@ -730,86 +740,56 @@ const rules = [
     })
 ];
 /// <reference path="Board.ts" />
-/// <reference path="Rule.ts" />
-class Generator {
-    constructor(container) {
-        this.container = container;
+/// <reference path="ExtArray.ts" />
+/// <reference path="Observable.ts" />
+class CellsByCandidateCount extends Array {
+    constructor(board) {
+        super();
+        this.board = board;
+        this.observer = new Observer();
+        for (let i = 0; i < 10; ++i)
+            this[i] = new ExtArray();
+        this.fillTable();
+        this.observer.observe(board, 'candidatesChanged', this.candidatesChanged.bind(this));
+        this.observer.observe(board, 'cellSet', this.cellSet.bind(this));
+        this.observer.observe(board, 'cellUnset', this.cellUnset.bind(this));
     }
-    generateBoard(rules) {
-        this.board = new Board();
-        this.solver = new BacktrackSolver(this.board);
-        this.tryAddNextClue();
-        this.tryRemoveClues();
-        return this.board;
+    fillTable() {
+        const candidatesTable = this.board.candidatesTable;
+        let i;
+        for (i = 0; i < 81; ++i)
+            if (!this.board.table[i])
+                this[candidatesTable[i].count].push(i);
     }
-    tryAddNextClue() {
-        const solver = this.solver;
-        for (let cnum = 9; cnum >= 1; --cnum) {
-            if (solver.cellsByCandidateCnt[cnum].length === 0)
-                continue;
-            const cells = solver.cellsByCandidateCnt[cnum].slice();
-            this.randomizePermutation(cells);
-            for (const cell of cells) {
-                const candidates = [...this.board.candidatesTable[cell]];
-                this.randomizePermutation(candidates);
-                for (const candidate of candidates) {
-                    solver.setCell(cell, candidate);
-                    const solutions = solver.solve();
-                    if (solutions === 1)
-                        return true;
-                    if (solutions > 1) {
-                        if (this.tryAddNextClue())
-                            return true;
-                    }
-                    solver.unSetCell(cell);
-                }
-            }
-        }
+    candidatesChanged(cell, oldCandidates, newCandidates) {
+        this[oldCandidates.count].remove(cell);
+        this[newCandidates.count].push(cell);
     }
-    tryRemoveClues() {
-        const board = this.board;
-        const solver = this.solver;
-        const cellsToRemove = [];
-        for (let cell = 0; cell < 81; ++cell) {
-            if (board.table[cell]) {
-                cellsToRemove.push([cell, Candidates.bitcount(board.modifiedCandidates[cell])]);
-            }
-        }
-        cellsToRemove.sort((a, b) => a[1] - b[1]);
-        for (const [cell, candidateCount] of cellsToRemove) {
-            const modified = solver.clearCell(cell);
-            const solutions = solver.solve();
-            if (solutions !== 1) {
-                solver.unClearCell(cell, modified);
-            }
-        }
+    cellSet(cell, digit, oldCandidates) {
+        // when this event is fired, the candidatesTable still contains the unchanged value (count)
+        this[oldCandidates.count].remove(cell);
     }
-    randomizePermutation(array) {
-        for (let i = array.length; i > 1;) {
-            const rIdx = Math.random() * i | 0;
-            if (rIdx < --i) {
-                const tmp = array[rIdx];
-                array[rIdx] = array[i];
-                array[i] = tmp;
-            }
-        }
+    cellUnset(cell, digit, newCandidates) {
+        // when this event is fired, the candidatesTable contains the new value (count)
+        this[newCandidates.count].push(cell);
+    }
+    destroy() {
+        this.observer.unobserve();
     }
 }
 /// <reference path="Board.ts" />
 /// <reference path="BlockType.ts" />
 /// <reference path="ExtArray.ts" />
+/// <reference path="CellsByCandidateCount.ts" />
 class BacktrackSolver {
-    constructor(board) {
+    constructor(board, cellsByCandidateCnt) {
         this.board = board;
+        this.cellsByCandidateCnt = cellsByCandidateCnt;
         this.fillCountTables(board);
         this.candidatesChanged_Removed = this.candidatesChanged.bind(this, -1);
         this.candidatesChanged_Added = this.candidatesChanged.bind(this, 1);
     }
     fillCountTables(board) {
-        const cbcc = this.cellsByCandidateCnt = Array.from(Array(10), () => new ExtArray());
-        for (let i = 0; i < 81; ++i)
-            if (!board.table[i])
-                cbcc[board.candidatesTable[i].count].push(i);
         const htuples = this.hiddenTupleCount = Array(3 * 9 * 9).fill(0);
         let htIdx = 0;
         for (let btIdx = 0; btIdx < 3; ++btIdx) {
@@ -829,26 +809,12 @@ class BacktrackSolver {
     }
     setCell(cell, digit) {
         const count = this.board.candidatesTable[cell].count;
-        this.removeCellFromCBCC(cell, count);
         this.updateHiddenTupleCountForCell(cell, -1);
         this.board.setCell(cell, digit, this.candidatesChanged_Removed);
     }
     unSetCell(cell) {
         this.board.unSetCell(cell, this.candidatesChanged_Added);
-        this.addCellToCBCC(cell);
         this.updateHiddenTupleCountForCell(cell, 1);
-    }
-    clearCell(cell) {
-        const modified = this.board.clearCell(cell, this.candidatesChanged_Added);
-        this.addCellToCBCC(cell);
-        this.updateHiddenTupleCountForCell(cell, 1);
-        return modified;
-    }
-    unClearCell(cell, modified) {
-        const count = this.board.candidatesTable[cell].count;
-        this.removeCellFromCBCC(cell, count);
-        this.updateHiddenTupleCountForCell(cell, -1);
-        this.board.unClearCell(cell, modified, this.candidatesChanged_Removed);
     }
     solve() {
         this.callCounter = 0;
@@ -874,7 +840,7 @@ class BacktrackSolver {
         while (htnum <= 9 && this.hiddenTuplesByCnt[htnum].length === 0)
             htnum++;
         if (cnum <= htnum) {
-            const cell = this.cellsByCandidateCnt[cnum].pop();
+            const cell = this.cellsByCandidateCnt[cnum][this.cellsByCandidateCnt[cnum].length - 1];
             this.updateHiddenTupleCountForCell(cell, -1);
             for (const digit of this.board.candidatesTable[cell]) {
                 this.board.setCell(cell, digit, this.candidatesChanged_Removed);
@@ -884,7 +850,7 @@ class BacktrackSolver {
                     break;
             }
             this.updateHiddenTupleCountForCell(cell, 1);
-            this.cellsByCandidateCnt[cnum].push(cell);
+            // this.cellsByCandidateCnt[cnum].push(cell);
         }
         else {
             const htKey = this.hiddenTuplesByCnt[htnum][0];
@@ -894,25 +860,16 @@ class BacktrackSolver {
             const bitmask = 1 << digit - 1;
             for (const cell of blockTypes[btIdx].blocks[bIdx]) {
                 if (this.board.candidatesTable[cell].bits & bitmask) {
-                    this.removeCellFromCBCC(cell, this.board.candidatesTable[cell].count);
                     this.updateHiddenTupleCountForCell(cell, -1);
                     this.board.setCell(cell, digit, this.candidatesChanged_Removed);
                     this.solveNextCell(cnum - 1);
                     this.board.unSetCell(cell, this.candidatesChanged_Added);
                     this.updateHiddenTupleCountForCell(cell, 1);
-                    this.addCellToCBCC(cell);
                     if (this.solutionCount > 1)
                         break;
                 }
             }
         }
-    }
-    removeCellFromCBCC(cell, count) {
-        this.cellsByCandidateCnt[count].remove(cell);
-    }
-    addCellToCBCC(cell) {
-        const newCnt = this.board.candidatesTable[cell].count;
-        this.cellsByCandidateCnt[newCnt].push(cell);
     }
     updateHiddenTupleCount(cell, digit, delta) {
         for (let btIdx = 0; btIdx < 3; ++btIdx) {
@@ -936,9 +893,94 @@ class BacktrackSolver {
         }
     }
     candidatesChanged(delta, cell, oldCnt, digit) {
-        this.removeCellFromCBCC(cell, oldCnt);
-        this.addCellToCBCC(cell);
         this.updateHiddenTupleCount(cell, digit, delta);
+    }
+}
+/// <reference path="Board.ts" />
+/// <reference path="BacktrackSolver.ts" />
+class Game {
+    constructor(container) {
+        this.container = container;
+        this.loadTable();
+    }
+    loadTable(table) {
+        this.board = new Board(table);
+        this.cellsByCandidateCount = new CellsByCandidateCount(this.board);
+        this.solver = new BacktrackSolver(this.board, this.cellsByCandidateCount);
+        this.render(this.container);
+    }
+    render(container) {
+        this.board.render(this.container = container || this.container);
+    }
+    destroy() {
+        this.cellsByCandidateCount.destroy();
+    }
+}
+/// <reference path="Board.ts" />
+/// <reference path="Rule.ts" />
+/// <reference path="Game.ts" />
+class Generator {
+    constructor(container) {
+        this.container = container;
+    }
+    generate(rules) {
+        this.game = new Game(this.container);
+        this.tryAddNextClue();
+        // this.tryRemoveClues();
+        return this.game;
+    }
+    tryAddNextClue() {
+        const solver = this.game.solver;
+        const candidatesTable = this.game.board.candidatesTable;
+        for (let cnum = 9; cnum >= 1; --cnum) {
+            if (this.game.cellsByCandidateCount[cnum].length === 0)
+                continue;
+            const cells = solver.cellsByCandidateCnt[cnum].slice();
+            this.randomizePermutation(cells);
+            for (const cell of cells) {
+                const candidates = [...candidatesTable[cell]];
+                this.randomizePermutation(candidates);
+                for (const candidate of candidates) {
+                    solver.setCell(cell, candidate);
+                    const solutions = solver.solve();
+                    if (solutions === 1)
+                        return true;
+                    if (solutions > 1) {
+                        if (this.tryAddNextClue())
+                            return true;
+                    }
+                    solver.unSetCell(cell);
+                }
+            }
+        }
+    }
+    // tryRemoveClues() {
+    //     const board = this.board;
+    //     const solver = this.solver;
+    //     const cellsToRemove = [];
+    //     for (let cell = 0; cell < 81; ++cell) {
+    //         if (board.table[cell]) {
+    //             cellsToRemove.push([cell, Candidates.bitcount(board.modifiedCandidates[cell])]);
+    //         }
+    //     }
+    //     cellsToRemove.sort((a, b) => a[1] - b[1]);
+    //     for (const [cell, candidateCount] of cellsToRemove) {
+    //         const modified = solver.clearCell(cell);
+    //         const solutions = solver.solve();
+    //         if (solutions !== 1) {
+    //             solver.unClearCell(cell, modified);            
+    //         }
+    //     }
+    // }
+    randomizePermutation(array) {
+        for (let i = array.length; i > 1;) {
+            const rIdx = Math.random() * i | 0;
+            if (rIdx < --i) {
+                const tmp = array[rIdx];
+                array[rIdx] = array[i];
+                array[i] = tmp;
+            }
+        }
     }
 }
 /// <reference path="Board.ts" />
@@ -953,45 +995,44 @@ const measure = (fn) => {
     fn();
     return performance.now() - time;
 };
-let board;
+let game = new Game($('#container'));
 const loadSelect = $('#loadTable');
 Object.keys(sampleTables).forEach(key => loadSelect.options.add(new Option(key, key)));
 loadSelect.addEventListener('change', () => {
-    board = new Board(sampleTables[loadSelect.value]);
-    board.render($('#container'));
+    game.loadTable(sampleTables[loadSelect.value]);
     console.log(`Loaded "${loadSelect.value}."`);
 });
 loadSelect.value = 'generated_hard';
 loadSelect.dispatchEvent(new Event('change'));
-$('#validateBtn').addEventListener('click', () => board.checkValidity());
-$('#nextBtn').addEventListener('click', () => board.runRulesForNextStep(rules));
+$('#validateBtn').addEventListener('click', () => game.board.checkValidity());
+$('#nextBtn').addEventListener('click', () => game.board.runRulesForNextStep(rules));
 $('#backtrackBtn').addEventListener('click', () => {
     let solutions, calls;
     let time = measure(() => {
-        let solver = new BacktrackSolver(board);
+        let solver = game.solver;
         solutions = solver.solve();
         calls = solver.callCounter;
     });
     console.log('solutions: ', solutions, 'in', time, 'ms', calls, 'calls');
-    board.render($('#container'));
+    game.render();
 });
 $('#generateBtn').addEventListener('click', () => {
     let generator = new Generator($('#container'));
     let time = measure(() => {
-        board = generator.generateBoard(rules);
+        game = generator.generate(rules);
     });
-    console.log('generated in', time, 'ms;', board.numCellsSolved, 'clues');
-    board.render($('#container'));
+    console.log('generated in', time, 'ms;', game.board.numCellsSolved, 'clues');
+    game.render();
 });
 $('#rulesAndSolveBtn').addEventListener('click', () => {
     let solutions, calls;
     let time = measure(() => {
-        board.runRulesUntilDone(rules);
-        let solver = new BacktrackSolver(board);
+        game.board.runRulesUntilDone(rules);
+        let solver = game.solver;
         solutions = solver.solve();
         calls = solver.callCounter;
     });
     console.log('solutions: ', solutions, 'in', time, 'ms', calls, 'calls');
-    board.render($('#container'));
+    game.render();
 });
 //# sourceMappingURL=slydoku.js.map

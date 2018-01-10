@@ -13,52 +13,51 @@ const measure = (fn) => {
     return performance.now() - time;
 }
 
-let board:Board;
+let generator = new Generator($('#container'));
+let game:Game = new Game($('#container'));
 
 const loadSelect = $('#loadTable');
 
 Object.keys(sampleTables).forEach(key => loadSelect.options.add(new Option(key, key)));
 loadSelect.addEventListener('change', () => {
-    board = new Board(sampleTables[loadSelect.value]);
-    board.render($('#container'));
+    game.loadTable(sampleTables[loadSelect.value]);
     console.log(`Loaded "${loadSelect.value}."`);
 });
 
 loadSelect.value = 'generated_hard';
 loadSelect.dispatchEvent(new Event('change'))
 
-$('#validateBtn').addEventListener('click', () => board.checkValidity());
+$('#validateBtn').addEventListener('click', () => game.board.checkValidity());
 
-$('#nextBtn').addEventListener('click', () => board.runRulesForNextStep(rules));
+$('#nextBtn').addEventListener('click', () => game.board.runRulesForNextStep(rules));
 
 $('#backtrackBtn').addEventListener('click', () => {
     let solutions, calls;
     let time = measure(() => {
-        let solver = new BacktrackSolver(board);
+        let solver = game.solver;
         solutions = solver.solve();    
         calls = solver.callCounter;
     });
     console.log('solutions: ', solutions, 'in', time, 'ms', calls, 'calls');
-    board.render($('#container'));
+    game.render();
 });
 
 $('#generateBtn').addEventListener('click', () => {
-    let generator = new Generator($('#container'));
     let time = measure(() => {
-        board = generator.generateBoard(rules);
+        game = generator.generate(rules);
     });
-    console.log('generated in', time, 'ms;', board.numCellsSolved, 'clues');
-    board.render($('#container'));
+    console.log('generated in', time, 'ms;', game.board.numCellsSolved, 'clues');
+    game.render();
 });
 
 $('#rulesAndSolveBtn').addEventListener('click', () => {
     let solutions, calls;
     let time = measure(() => {
-        board.runRulesUntilDone(rules);
-        let solver = new BacktrackSolver(board);
+        game.board.runRulesUntilDone(rules);
+        let solver = game.solver;
         solutions = solver.solve();    
         calls = solver.callCounter;
     });
     console.log('solutions: ', solutions, 'in', time, 'ms', calls, 'calls');
-    board.render($('#container'));
+    game.render();
 });

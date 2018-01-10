@@ -9,19 +9,19 @@ class Candidates {
 	}
 	
 	setBits(bits:number) {
-		this.count = Candidates.bitcount(this.bits = bits);
-	}
-
-	removeBits(bitmask:number) {
-		if (this.bits & bitmask) {
-			this.count = Candidates.bitcount(this.bits &= ~bitmask);
+		if (this.bits !== bits) {
+			this.count = Candidates.bitcount(this.bits = bits);
 			return true;
 		}
 		return false;
 	}
 
+	removeBits(bitmask:number) {
+		return this.setBits(this.bits & ~bitmask);
+	}
+
 	addBits(bitmask:number) {
-		this.count = Candidates.bitcount(this.bits |= bitmask);
+		return this.setBits(this.bits | bitmask);
 	}
 
 	static bitcount(n:number):number {

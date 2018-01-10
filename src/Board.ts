@@ -109,16 +109,23 @@ class Board extends Observable {
 			let bitmask = 0;
 			for (const cell of block) bitmask |= 1 << this.table[cell];
 			bitmask >>= 1;
-			for (const cell of block) this.removeCandidate(cell, bitmask);
+			for (const cell of block) this.candidatesTable[cell].removeBits(bitmask); //this.removeCandidate(cell, bitmask);
 		}
 	}
 	
-	private removeCandidate(cell:number, bitmask:number) {
-		return this.candidatesTable[cell].removeBits(bitmask);
+	private changeCandidate(cell:number, bitmask:number, add:boolean) {
+		const candidates = this.candidatesTable[cell];
+		const old = candidates.clone();
+		if (candidates[add ? 'addBits' : 'removeBits'](bitmask)) {
+			this.emit('candidatesChanged', cell, old, candidates);
+			return true;
+		}
 	}
-
+	private removeCandidate(cell:number, bitmask:number) {
+		return this.changeCandidate(cell, bitmask, false);
+	}
 	private addCandidate(cell:number, bitmask:number) {
-		this.candidatesTable[cell].addBits(bitmask);
+		return this.changeCandidate(cell, bitmask, true);
 	}
 
     applySolveStep({op, cell, digit}:SolveStep) {
@@ -145,6 +152,8 @@ class Board extends Observable {
 	setCell(cell:number, digit:number, candidatesModified?:CandidatesModifiedFn) {
 		this.table[cell] = digit;
 		this.numCellsSolved++;
+		const candidates = this.candidatesTable[cell];
+		this.emit('cellSet', cell, digit, candidates);
 
 		const bitmask = 1<<digit-1;
 		let modified = 0, modBit = 1;
@@ -158,8 +167,8 @@ class Board extends Observable {
 			modBit <<= 1; 
 		}
 
-		this.modifiedCandidates[cell] = modified | (this.candidatesTable[cell].bits << 20);
-		this.candidatesTable[cell].solved();
+		this.modifiedCandidates[cell] = modified | (candidates.bits << 20);
+		candidates.solved();
 	}
 	
 	unSetCell(cell:number, candidatesModified?:CandidatesModifiedFn) {
@@ -179,55 +188,58 @@ class Board extends Observable {
 			modified >>= 1;
 		}
 
-		this.candidatesTable[cell].setBits(modified);
+		const candidates = this.candidatesTable[cell];
+
+		candidates.setBits(modified);
 		this.modifiedCandidates[cell] = 0;
+		this.emit('cellUnset', cell, digit, candidates);
 	}
 
-	clearCell(cell:number, candidatesModified?:CandidatesModifiedFn) {
-		const digit = this.table[cell];
-		this.table[cell] = 0;
+	// clearCell(cell:number, candidatesModified?:CandidatesModifiedFn) {
+	// 	const digit = this.table[cell];
+	// 	this.table[cell] = 0;
 
-		const affectedCells = this.getAffectedCells(cell);
-		const affectedCandidateCnts = affectedCells.map(cell => this.candidatesTable[cell].count);
+	// 	const affectedCells = this.getAffectedCells(cell);
+	// 	const affectedCandidateCnts = affectedCells.map(cell => this.candidatesTable[cell].count);
 
-		this.calcCandidates();	// I don't know any faster way... If you do, let me know!
+	// 	this.calcCandidates();	// I don't know any faster way... If you do, let me know!
 
-		const bitmask = 1<<digit-1;
-		let modified = 0, modBit = 1;
+	// 	const bitmask = 1<<digit-1;
+	// 	let modified = 0, modBit = 1;
 
-		for (let i = 0; i < affectedCells.length; ++i) {
-			const acell = affectedCells[i];
-			const oldCnum = affectedCandidateCnts[i];
+	// 	for (let i = 0; i < affectedCells.length; ++i) {
+	// 		const acell = affectedCells[i];
+	// 		const oldCnum = affectedCandidateCnts[i];
 
-			if (this.candidatesTable[acell].count !== oldCnum) { 
-				modified |= modBit; 
-				if (candidatesModified) candidatesModified(acell, oldCnum, digit);
-			}
+	// 		if (this.candidatesTable[acell].count !== oldCnum) { 
+	// 			modified |= modBit; 
+	// 			if (candidatesModified) candidatesModified(acell, oldCnum, digit);
+	// 		}
 			
-			modBit <<= 1; 
-		}
-		this.modifiedCandidates[cell] = 0;	// 
-		return modified | (digit << 20);
-	}
+	// 		modBit <<= 1; 
+	// 	}
+	// 	this.modifiedCandidates[cell] = 0;	// 
+	// 	return modified | (digit << 20);
+	// }
 
-	unClearCell(cell:number, modified:number, candidatesModified?:CandidatesModifiedFn) {
-		const digit = modified >> 20;
-		this.table[cell] = digit;
-		this.numCellsSolved++;
+	// unClearCell(cell:number, modified:number, candidatesModified?:CandidatesModifiedFn) {
+	// 	const digit = modified >> 20;
+	// 	this.table[cell] = digit;
+	// 	this.numCellsSolved++;
 
-		const bitmask = 1<<digit-1;
+	// 	const bitmask = 1<<digit-1;
 
-		for (const acell of this.getAffectedCells(cell)) {
-			if (modified&1) {
-				const oldCnum = this.candidatesTable[acell].count;
-				this.removeCandidate(acell, bitmask);
-				if (candidatesModified) candidatesModified(acell, oldCnum, digit);
-			}
-			modified >>= 1;
-		}
+	// 	for (const acell of this.getAffectedCells(cell)) {
+	// 		if (modified&1) {
+	// 			const oldCnum = this.candidatesTable[acell].count;
+	// 			this.removeCandidate(acell, bitmask);
+	// 			if (candidatesModified) candidatesModified(acell, oldCnum, digit);
+	// 		}
+	// 		modified >>= 1;
+	// 	}
 
-		this.candidatesTable[cell].solved();
-	}
+	// 	this.candidatesTable[cell].solved();
+	// }
 
 	runRule(ruleFn:RuleFn) {
 		const results = ruleFn(this);
