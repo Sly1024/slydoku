@@ -782,39 +782,17 @@ class CellsByCandidateCount extends Array {
 /// <reference path="ExtArray.ts" />
 /// <reference path="CellsByCandidateCount.ts" />
 class BacktrackSolver {
-    constructor(board, cellsByCandidateCnt) {
+    constructor(board, cellsByCandidateCnt, candidatePositions) {
         this.board = board;
         this.cellsByCandidateCnt = cellsByCandidateCnt;
-        this.fillCountTables(board);
-        this.candidatesChanged_Removed = this.candidatesChanged.bind(this, -1);
-        this.candidatesChanged_Added = this.candidatesChanged.bind(this, 1);
-    }
-    fillCountTables(board) {
-        const htuples = this.hiddenTupleCount = Array(3 * 9 * 9).fill(0);
-        let htIdx = 0;
-        for (let btIdx = 0; btIdx < 3; ++btIdx) {
-            const { blocks } = blockTypes[btIdx];
-            for (let blockIdx = 0; blockIdx < 9; ++blockIdx, htIdx += 9) {
-                for (const cell of blocks[blockIdx]) {
-                    for (const digit of board.candidatesTable[cell]) {
-                        ++htuples[htIdx + digit - 1];
-                    }
-                }
-            }
-        }
-        const htuplesByCnt = this.hiddenTuplesByCnt = Array.from(Array(10), () => new ExtArray());
-        for (let i = 0; i < htuples.length; ++i) {
-            htuplesByCnt[htuples[i]].push(i);
-        }
+        this.candidatePositions = candidatePositions;
     }
     setCell(cell, digit) {
         const count = this.board.candidatesTable[cell].count;
-        this.updateHiddenTupleCountForCell(cell, -1);
-        this.board.setCell(cell, digit, this.candidatesChanged_Removed);
+        this.board.setCell(cell, digit);
     }
     unSetCell(cell) {
-        this.board.unSetCell(cell, this.candidatesChanged_Added);
-        this.updateHiddenTupleCountForCell(cell, 1);
+        this.board.unSetCell(cell);
     }
     solve() {
         this.callCounter = 0;
@@ -836,68 +814,98 @@ class BacktrackSolver {
             this.solutionCount++;
             return;
         }
-        let htnum = 1;
-        while (htnum <= 9 && this.hiddenTuplesByCnt[htnum].length === 0)
-            htnum++;
-        if (cnum <= htnum) {
-            const cell = this.cellsByCandidateCnt[cnum][this.cellsByCandidateCnt[cnum].length - 1];
-            this.updateHiddenTupleCountForCell(cell, -1);
+        let pnum = 1;
+        while (pnum <= 9 && this.candidatePositions.byCount[pnum].length === 0)
+            pnum++;
+        if (cnum <= pnum) {
+            const cell = this.cellsByCandidateCnt[cnum][0];
             for (const digit of this.board.candidatesTable[cell]) {
-                this.board.setCell(cell, digit, this.candidatesChanged_Removed);
+                this.board.setCell(cell, digit);
                 this.solveNextCell(cnum - 1);
-                this.board.unSetCell(cell, this.candidatesChanged_Added);
+                this.board.unSetCell(cell);
                 if (this.solutionCount > 1)
                     break;
             }
-            this.updateHiddenTupleCountForCell(cell, 1);
             // this.cellsByCandidateCnt[cnum].push(cell);
         }
         else {
-            const htKey = this.hiddenTuplesByCnt[htnum][0];
-            const digit = (htKey % 9) + 1;
-            const bIdx = (htKey / 9 | 0) % 9;
-            const btIdx = htKey / 81 | 0;
+            const pKey = this.candidatePositions.byCount[pnum][0];
+            const digit = (pKey % 9) + 1;
+            const bIdx = (pKey / 9 | 0) % 9;
+            const btIdx = pKey / 81 | 0;
             const bitmask = 1 << digit - 1;
             for (const cell of blockTypes[btIdx].blocks[bIdx]) {
                 if (this.board.candidatesTable[cell].bits & bitmask) {
-                    this.updateHiddenTupleCountForCell(cell, -1);
-                    this.board.setCell(cell, digit, this.candidatesChanged_Removed);
+                    this.board.setCell(cell, digit);
                     this.solveNextCell(cnum - 1);
-                    this.board.unSetCell(cell, this.candidatesChanged_Added);
-                    this.updateHiddenTupleCountForCell(cell, 1);
+                    this.board.unSetCell(cell);
                     if (this.solutionCount > 1)
                         break;
                 }
             }
         }
     }
-    updateHiddenTupleCount(cell, digit, delta) {
+}
+/// <reference path="Board.ts" />
+/// <reference path="ExtArray.ts" />
+class CandidatePositions {
+    constructor(board) {
+        this.board = board;
+        this.byCount = [];
+        this.observer = new Observer();
+        this.fillTable();
+        this.observer.observe(board, 'candidatesChanged', this.candidatesChanged.bind(this));
+        this.observer.observe(board, 'cellSet', this.cellSet.bind(this));
+        this.observer.observe(board, 'cellUnset', this.cellUnset.bind(this));
+    }
+    fillTable() {
+        const candidates = this.board.candidatesTable;
+        const positions = this.positions = Array.from(Array(3 * 9 * 9), () => new ExtArray());
+        let idx = 0;
         for (let btIdx = 0; btIdx < 3; ++btIdx) {
-            const bIdx = blockTypes[btIdx].getIdx(cell);
-            const htKey = btIdx * 81 + bIdx * 9 + digit - 1;
-            this.hiddenTuplesByCnt[this.hiddenTupleCount[htKey]].remove(htKey);
-            this.hiddenTuplesByCnt[this.hiddenTupleCount[htKey] += delta].push(htKey);
+            const { blocks } = blockTypes[btIdx];
+            for (let blockIdx = 0; blockIdx < 9; ++blockIdx, idx += 9) {
+                for (const cell of blocks[blockIdx]) {
+                    for (const digit of candidates[cell]) {
+                        positions[idx + digit - 1].push(cell);
+                    }
+                }
+            }
+        }
+        const byCount = this.byCount = Array.from(Array(10), () => new ExtArray());
+        for (let i = 0; i < positions.length; ++i) {
+            byCount[positions[i].length].push(i);
         }
     }
-    updateHiddenTupleCountForCell(cell, delta) {
-        // does: for (const candidate of this.board.candidatesTable[cell]) this.updateHiddenTupleCount(cell, candidate, delta);
-        const candidates = this.board.candidatesTable[cell];
-        for (let btIdx = 0, htKeyBtPre = 0; btIdx < 3; ++btIdx, htKeyBtPre += 81) {
+    candidatesChanged(cell, oldCandidates, newCandidates) {
+        const changedBits = oldCandidates.bits ^ newCandidates.bits;
+        const added = oldCandidates.count < newCandidates.count;
+        const digits = [...Candidates.prototype[Symbol.iterator].call({ bits: changedBits })];
+        for (let btIdx = 0, keyBtPre = 0; btIdx < 3; ++btIdx, keyBtPre += 81) {
             const bIdx = blockTypes[btIdx].getIdx(cell);
-            const htKeyPre = htKeyBtPre + bIdx * 9;
-            for (const candidate of candidates) {
-                const htKey = htKeyPre + candidate - 1;
-                this.hiddenTuplesByCnt[this.hiddenTupleCount[htKey]].remove(htKey);
-                this.hiddenTuplesByCnt[this.hiddenTupleCount[htKey] += delta].push(htKey);
+            const keyPre = keyBtPre + bIdx * 9;
+            for (const digit of digits) {
+                const htKey = keyPre + digit - 1;
+                const list = this.positions[htKey];
+                this.byCount[list.length].remove(htKey);
+                if (added)
+                    list.push(cell);
+                else
+                    list.remove(cell);
+                this.byCount[list.length].push(htKey);
             }
         }
     }
-    candidatesChanged(delta, cell, oldCnt, digit) {
-        this.updateHiddenTupleCount(cell, digit, delta);
+    cellSet(cell, digit, oldCandidates) {
+        this.candidatesChanged(cell, oldCandidates, new Candidates(0, 0));
+    }
+    cellUnset(cell, digit, newCandidates) {
+        this.candidatesChanged(cell, new Candidates(0, 0), newCandidates);
     }
 }
 /// <reference path="Board.ts" />
 /// <reference path="BacktrackSolver.ts" />
+/// <reference path="CandidatePositions.ts" />
 class Game {
     constructor(container) {
         this.container = container;
@@ -906,7 +914,8 @@ class Game {
     loadTable(table) {
         this.board = new Board(table);
         this.cellsByCandidateCount = new CellsByCandidateCount(this.board);
-        this.solver = new BacktrackSolver(this.board, this.cellsByCandidateCount);
+        this.candidatePositions = new CandidatePositions(this.board);
+        this.solver = new BacktrackSolver(this.board, this.cellsByCandidateCount, this.candidatePositions);
         this.render(this.container);
     }
     render(container) {
@@ -995,6 +1004,7 @@ const measure = (fn) => {
     fn();
     return performance.now() - time;
 };
+let generator = new Generator($('#container'));
 let game = new Game($('#container'));
 const loadSelect = $('#loadTable');
 Object.keys(sampleTables).forEach(key => loadSelect.options.add(new Option(key, key)));
@@ -1017,7 +1027,6 @@ $('#backtrackBtn').addEventListener('click', () => {
     game.render();
 });
 $('#generateBtn').addEventListener('click', () => {
-    let generator = new Generator($('#container'));
     let time = measure(() => {
         game = generator.generate(rules);
     });
