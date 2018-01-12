@@ -18,6 +18,7 @@ class Generator {
 
     tryAddNextClue() {
         const solver = this.game.solver;
+        const board = this.game.board;
         const candidatesTable = this.game.board.candidatesTable;
         for (let cnum = 9; cnum >= 1; --cnum) {
             if (this.game.cellsByCandidateCount[cnum].length === 0) continue;
@@ -27,13 +28,13 @@ class Generator {
                 const candidates = [...candidatesTable[cell]];
                 this.randomizePermutation(candidates);
                 for (const candidate of candidates) {
-                    solver.setCell(cell, candidate);
+                    board.setCell(cell, candidate);
                     const solutions = solver.solve();
                     if (solutions === 1) return true;
                     if (solutions > 1) {
                         if (this.tryAddNextClue()) return true;
                     }
-                    solver.unSetCell(cell);
+                    board.history.undoLastStep();
                 }
             }
         }

@@ -2,11 +2,10 @@
 /// <reference path="BlockType.ts" />
 /// <reference path="SolveStep.ts" />
 /// <reference path="Observable.ts" />
+/// <reference path="BoardHistory.ts" />
 
 
 type RuleFn = (board:Board) => SolveStep[];
-
-type CandidatesModifiedFn = (cell:number, oldCnt:number, digit:number)=>void;
 
 class Board extends Observable {
 
@@ -15,6 +14,7 @@ class Board extends Observable {
     public candidatesTable: Candidates[];
 	public numCellsSolved:number;
 	public modifiedCandidates:number[];
+	public history:BoardHistory;
 
 	constructor(board?:string|number[]|Board) {
 		super();
@@ -22,12 +22,12 @@ class Board extends Observable {
 			this.table = board.table.slice();
 			this.container = board.container;
 			this.candidatesTable = board.candidatesTable.map(candi => candi.clone());
-			this.modifiedCandidates = board.modifiedCandidates.slice();
 			this.numCellsSolved = board.numCellsSolved;
+			this.history = board.history.clone(this);
         } else {
 			this.table = this.checkTableErrors(board) || Array(9*9).fill(0);
-			this.modifiedCandidates = Array(9*9).fill(0);
-            this.calcCandidates();
+			this.calcCandidates();
+			this.history = new BoardHistory(this);
         }
 	}
 
@@ -109,21 +109,23 @@ class Board extends Observable {
 			let bitmask = 0;
 			for (const cell of block) bitmask |= 1 << this.table[cell];
 			bitmask >>= 1;
-			for (const cell of block) this.candidatesTable[cell].removeBits(bitmask); //this.removeCandidate(cell, bitmask);
+			for (const cell of block) this.candidatesTable[cell].removeBits(bitmask); 
 		}
 	}
 	
-	private changeCandidate(cell:number, bitmask:number, add:boolean) {
+	changeCandidate(cell:number, bitmask:number, add:boolean) {
 		const candidates = this.candidatesTable[cell];
 		const old = candidates.clone();
 		if (candidates[add ? 'addBits' : 'removeBits'](bitmask)) {
-			this.emit('candidatesChanged', cell, old, candidates);
+			this.emit('candidatesChanged', cell, old, candidates, bitmask, add);
 			return true;
 		}
 	}
+
 	private removeCandidate(cell:number, bitmask:number) {
 		return this.changeCandidate(cell, bitmask, false);
 	}
+
 	private addCandidate(cell:number, bitmask:number) {
 		return this.changeCandidate(cell, bitmask, true);
 	}
@@ -149,49 +151,30 @@ class Board extends Observable {
 		return affected;
 	}
 
-	setCell(cell:number, digit:number, candidatesModified?:CandidatesModifiedFn) {
+	setCell(cell:number, digit:number) {
 		this.table[cell] = digit;
 		this.numCellsSolved++;
+
 		const candidates = this.candidatesTable[cell];
+		const bitmask = 1 << digit-1;
 		this.emit('cellSet', cell, digit, candidates);
 
-		const bitmask = 1<<digit-1;
-		let modified = 0, modBit = 1;
-
 		for (const acell of this.getAffectedCells(cell)) {
-			const oldCnum = this.candidatesTable[acell].count;
-			if (this.removeCandidate(acell, bitmask)) { 
-				modified |= modBit; 
-				if (candidatesModified) candidatesModified(acell, oldCnum, digit);
-			}
-			modBit <<= 1; 
+			this.removeCandidate(acell, bitmask); 
 		}
 
-		this.modifiedCandidates[cell] = modified | (candidates.bits << 20);
 		candidates.solved();
+		this.history.markStepDone();
 	}
 	
-	unSetCell(cell:number, candidatesModified?:CandidatesModifiedFn) {
+	unSetCell(cell:number, bits:number) {
 		const digit = this.table[cell];
 		this.table[cell] = 0;
 		this.numCellsSolved--;
-		
-		const bitmask = 1<<digit-1;
-		let modified = this.modifiedCandidates[cell];
-
-		for (const acell of this.getAffectedCells(cell)) {
-			if (modified&1) {
-				const oldCnum = this.candidatesTable[acell].count;
-				this.addCandidate(acell, bitmask);
-				if (candidatesModified) candidatesModified(acell, oldCnum, digit);
-			}
-			modified >>= 1;
-		}
 
 		const candidates = this.candidatesTable[cell];
 
-		candidates.setBits(modified);
-		this.modifiedCandidates[cell] = 0;
+		candidates.setBits(bits);
 		this.emit('cellUnset', cell, digit, candidates);
 	}
 
@@ -247,6 +230,7 @@ class Board extends Observable {
 			for (const step of results) {
                 this.applySolveStep(step);
 			}
+			this.history.markStepDone();
 		}
 		return results;
 	}

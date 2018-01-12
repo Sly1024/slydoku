@@ -4,15 +4,13 @@
 
 class CellsByCandidateCount extends Array<ExtArray<number>> {
     
-    private observer: Observer = new Observer();
+    private observer:Observer = new Observer();
 
     constructor (private board:Board) {
         super();
         for (let i = 0; i < 10; ++i) this[i] = new ExtArray<number>();
         this.fillTable();
-        this.observer.observe(board, 'candidatesChanged', this.candidatesChanged.bind(this));
-        this.observer.observe(board, 'cellSet', this.cellSet.bind(this));
-        this.observer.observe(board, 'cellUnset', this.cellUnset.bind(this));
+        this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet', 'cellUnset');
     }
 
     fillTable() {
@@ -37,6 +35,6 @@ class CellsByCandidateCount extends Array<ExtArray<number>> {
     }
 
     destroy() {
-        this.observer.unobserve();
+        this.observer.destroy();
     }
 }

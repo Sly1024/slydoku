@@ -115,20 +115,103 @@ class Observable {
 }
 class Observer {
     constructor() {
-        this.subscriptions = [];
+        this.events = new ExtMap(() => new ExtArray());
     }
-    observe(host, event, handler) {
-        this.subscriptions.push([host, event, handler]);
-        host.on(event, handler);
+    observe(event, source, handler) {
+        const descriptor = {
+            source, handler, active: true,
+            observerFn: (...args) => { if (descriptor.active)
+                descriptor.handler.apply(source, args); }
+        };
+        source.on(event, descriptor.observerFn);
+        this.events.getOrCreate(event).push(descriptor);
     }
-    unobserve(host, event) {
-        this.subscriptions = this.subscriptions.filter(([s_host, s_event, handler]) => ((!host || host === s_host) && (!event || event === s_event)) ? host.off(event, handler) : true);
+    unobserve(event, source) {
+        const list = this.events.getOrCreate(event);
+        for (let i = 0; i < list.length;) {
+            const desc = list[i];
+            if (desc.source === source) {
+                desc.source.off(event, desc.observerFn);
+                list.removeAt(i);
+            }
+            else
+                ++i;
+        }
+    }
+    observeAndCall(source, target, ...events) {
+        for (const event of events) {
+            this.observe(event, source, target[event].bind(target));
+        }
+    }
+    suspend(event, source) {
+        for (const desc of this.events.getOrCreate(event)) {
+            if (!source || source === desc.source)
+                desc.active = false;
+        }
+    }
+    resume(event, source) {
+        for (const desc of this.events.getOrCreate(event)) {
+            if (!source || source === desc.source)
+                desc.active = true;
+        }
+    }
+    destroy() {
+        for (const [event, list] of this.events) {
+            for (const { source, observerFn } of list) {
+                source.off(event, observerFn);
+            }
+        }
+        this.events = null;
+    }
+}
+/// <reference path="Board.ts" />
+class BoardHistory {
+    constructor(board) {
+        this.board = board;
+        this.steps = [];
+        this.recorded = [];
+        this.observer = new Observer();
+        this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet');
+    }
+    candidatesChanged(cell, oldC, newC, bitmask, add) {
+        this.recorded.push(['c', cell, bitmask, add]);
+    }
+    cellSet(cell, digit, oldC) {
+        this.recorded.push(['s', cell, oldC.bits, false]);
+    }
+    markStepDone() {
+        if (this.recorded.length) {
+            this.steps.push(this.recorded);
+            this.recorded = [];
+        }
+    }
+    undoLastStep() {
+        if (this.recorded.length)
+            throw new Error('Still recording!');
+        if (this.steps.length === 0)
+            return;
+        this.observer.suspend('candidatesChanged');
+        for (const [op, cell, bits, add] of this.steps.pop().reverse()) {
+            if (op === 's') {
+                this.board.unSetCell(cell, bits);
+            }
+            else if (op === 'c') {
+                this.board.changeCandidate(cell, bits, !add);
+            }
+        }
+        this.observer.resume('candidatesChanged');
+    }
+    clone(board) {
+        const history = new BoardHistory(board);
+        history.steps = this.steps.slice();
+        return history;
     }
 }
 /// <reference path="Candidates.ts" />
 /// <reference path="BlockType.ts" />
 /// <reference path="SolveStep.ts" />
 /// <reference path="Observable.ts" />
+/// <reference path="BoardHistory.ts" />
 class Board extends Observable {
     constructor(board) {
         super();
@@ -136,13 +219,13 @@ class Board extends Observable {
             this.table = board.table.slice();
             this.container = board.container;
             this.candidatesTable = board.candidatesTable.map(candi => candi.clone());
-            this.modifiedCandidates = board.modifiedCandidates.slice();
             this.numCellsSolved = board.numCellsSolved;
+            this.history = board.history.clone(this);
         }
         else {
             this.table = this.checkTableErrors(board) || Array(9 * 9).fill(0);
-            this.modifiedCandidates = Array(9 * 9).fill(0);
             this.calcCandidates();
+            this.history = new BoardHistory(this);
         }
     }
     checkTableErrors(table) {
@@ -226,14 +309,14 @@ class Board extends Observable {
                     bitmask |= 1 << this.table[cell];
                 bitmask >>= 1;
                 for (const cell of block)
-                    this.candidatesTable[cell].removeBits(bitmask); //this.removeCandidate(cell, bitmask);
+                    this.candidatesTable[cell].removeBits(bitmask);
             }
     }
     changeCandidate(cell, bitmask, add) {
         const candidates = this.candidatesTable[cell];
         const old = candidates.clone();
         if (candidates[add ? 'addBits' : 'removeBits'](bitmask)) {
-            this.emit('candidatesChanged', cell, old, candidates);
+            this.emit('candidatesChanged', cell, old, candidates, bitmask, add);
             return true;
         }
     }
@@ -266,43 +349,24 @@ class Board extends Observable {
             affected.push(box.blocks[boxIdx][qidx]);
         return affected;
     }
-    setCell(cell, digit, candidatesModified) {
+    setCell(cell, digit) {
         this.table[cell] = digit;
         this.numCellsSolved++;
         const candidates = this.candidatesTable[cell];
-        this.emit('cellSet', cell, digit, candidates);
         const bitmask = 1 << digit - 1;
-        let modified = 0, modBit = 1;
+        this.emit('cellSet', cell, digit, candidates);
         for (const acell of this.getAffectedCells(cell)) {
-            const oldCnum = this.candidatesTable[acell].count;
-            if (this.removeCandidate(acell, bitmask)) {
-                modified |= modBit;
-                if (candidatesModified)
-                    candidatesModified(acell, oldCnum, digit);
-            }
-            modBit <<= 1;
+            this.removeCandidate(acell, bitmask);
         }
-        this.modifiedCandidates[cell] = modified | (candidates.bits << 20);
         candidates.solved();
+        this.history.markStepDone();
     }
-    unSetCell(cell, candidatesModified) {
+    unSetCell(cell, bits) {
         const digit = this.table[cell];
         this.table[cell] = 0;
         this.numCellsSolved--;
-        const bitmask = 1 << digit - 1;
-        let modified = this.modifiedCandidates[cell];
-        for (const acell of this.getAffectedCells(cell)) {
-            if (modified & 1) {
-                const oldCnum = this.candidatesTable[acell].count;
-                this.addCandidate(acell, bitmask);
-                if (candidatesModified)
-                    candidatesModified(acell, oldCnum, digit);
-            }
-            modified >>= 1;
-        }
         const candidates = this.candidatesTable[cell];
-        candidates.setBits(modified);
-        this.modifiedCandidates[cell] = 0;
+        candidates.setBits(bits);
         this.emit('cellUnset', cell, digit, candidates);
     }
     // clearCell(cell:number, candidatesModified?:CandidatesModifiedFn) {
@@ -346,6 +410,7 @@ class Board extends Observable {
             for (const step of results) {
                 this.applySolveStep(step);
             }
+            this.history.markStepDone();
         }
         return results;
     }
@@ -413,7 +478,11 @@ const sampleTables = {
 };
 class ExtArray extends Array {
     remove(item) {
-        const idx = this.indexOf(item);
+        this.removeAt(this.indexOf(item));
+    }
+    removeAt(idx) {
+        if (idx < 0)
+            return;
         const last = this.pop();
         if (idx < this.length)
             this[idx] = last;
@@ -750,9 +819,7 @@ class CellsByCandidateCount extends Array {
         for (let i = 0; i < 10; ++i)
             this[i] = new ExtArray();
         this.fillTable();
-        this.observer.observe(board, 'candidatesChanged', this.candidatesChanged.bind(this));
-        this.observer.observe(board, 'cellSet', this.cellSet.bind(this));
-        this.observer.observe(board, 'cellUnset', this.cellUnset.bind(this));
+        this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet', 'cellUnset');
     }
     fillTable() {
         const candidatesTable = this.board.candidatesTable;
@@ -774,7 +841,7 @@ class CellsByCandidateCount extends Array {
         this[newCandidates.count].push(cell);
     }
     destroy() {
-        this.observer.unobserve();
+        this.observer.destroy();
     }
 }
 /// <reference path="Board.ts" />
@@ -786,13 +853,6 @@ class BacktrackSolver {
         this.board = board;
         this.cellsByCandidateCnt = cellsByCandidateCnt;
         this.candidatePositions = candidatePositions;
-    }
-    setCell(cell, digit) {
-        const count = this.board.candidatesTable[cell].count;
-        this.board.setCell(cell, digit);
-    }
-    unSetCell(cell) {
-        this.board.unSetCell(cell);
     }
     solve() {
         this.callCounter = 0;
@@ -822,7 +882,7 @@ class BacktrackSolver {
             for (const digit of this.board.candidatesTable[cell]) {
                 this.board.setCell(cell, digit);
                 this.solveNextCell(cnum - 1);
-                this.board.unSetCell(cell);
+                this.board.history.undoLastStep();
                 if (this.solutionCount > 1)
                     break;
             }
@@ -838,7 +898,7 @@ class BacktrackSolver {
                 if (this.board.candidatesTable[cell].bits & bitmask) {
                     this.board.setCell(cell, digit);
                     this.solveNextCell(cnum - 1);
-                    this.board.unSetCell(cell);
+                    this.board.history.undoLastStep();
                     if (this.solutionCount > 1)
                         break;
                 }
@@ -854,9 +914,7 @@ class CandidatePositions {
         this.byCount = [];
         this.observer = new Observer();
         this.fillTable();
-        this.observer.observe(board, 'candidatesChanged', this.candidatesChanged.bind(this));
-        this.observer.observe(board, 'cellSet', this.cellSet.bind(this));
-        this.observer.observe(board, 'cellUnset', this.cellUnset.bind(this));
+        this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet', 'cellUnset');
     }
     fillTable() {
         const candidates = this.board.candidatesTable;
@@ -902,6 +960,9 @@ class CandidatePositions {
     cellUnset(cell, digit, newCandidates) {
         this.candidatesChanged(cell, new Candidates(0, 0), newCandidates);
     }
+    destroy() {
+        this.observer.destroy();
+    }
 }
 /// <reference path="Board.ts" />
 /// <reference path="BacktrackSolver.ts" />
@@ -940,6 +1001,7 @@ class Generator {
     }
     tryAddNextClue() {
         const solver = this.game.solver;
+        const board = this.game.board;
         const candidatesTable = this.game.board.candidatesTable;
         for (let cnum = 9; cnum >= 1; --cnum) {
             if (this.game.cellsByCandidateCount[cnum].length === 0)
@@ -950,7 +1012,7 @@ class Generator {
                 const candidates = [...candidatesTable[cell]];
                 this.randomizePermutation(candidates);
                 for (const candidate of candidates) {
-                    solver.setCell(cell, candidate);
+                    board.setCell(cell, candidate);
                     const solutions = solver.solve();
                     if (solutions === 1)
                         return true;
@@ -958,7 +1020,7 @@ class Generator {
                         if (this.tryAddNextClue())
                             return true;
                     }
-                    solver.unSetCell(cell);
+                    board.history.undoLastStep();
                 }
             }
         }
@@ -1015,6 +1077,10 @@ loadSelect.addEventListener('change', () => {
 loadSelect.value = 'generated_hard';
 loadSelect.dispatchEvent(new Event('change'));
 $('#validateBtn').addEventListener('click', () => game.board.checkValidity());
+$('#undoBtn').addEventListener('click', () => {
+    game.board.history.undoLastStep();
+    game.render();
+});
 $('#nextBtn').addEventListener('click', () => game.board.runRulesForNextStep(rules));
 $('#backtrackBtn').addEventListener('click', () => {
     let solutions, calls;

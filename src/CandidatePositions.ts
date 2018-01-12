@@ -8,13 +8,11 @@ class CandidatePositions {
     // key = blockTypeIdx*81 + blockIdx*9 + digit-1
     public positions:ExtArray<number>[];
 
-    private observer: Observer = new Observer();
+    private observer:Observer = new Observer();
 
     constructor(private board:Board) {
         this.fillTable();
-        this.observer.observe(board, 'candidatesChanged', this.candidatesChanged.bind(this));
-        this.observer.observe(board, 'cellSet', this.cellSet.bind(this));
-        this.observer.observe(board, 'cellUnset', this.cellUnset.bind(this));
+        this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet', 'cellUnset');
     }
 
     private fillTable() {
@@ -66,6 +64,6 @@ class CandidatePositions {
     }
 
     destroy() {
-        this.observer.unobserve();
+        this.observer.destroy();
     }
 }

@@ -9,15 +9,6 @@ class BacktrackSolver {
     constructor (private board:Board, public cellsByCandidateCnt:CellsByCandidateCount, private candidatePositions:CandidatePositions) {
     }
 
-    setCell(cell:number, digit:number) {
-        const count = this.board.candidatesTable[cell].count;
-        this.board.setCell(cell, digit);
-    }
-
-    unSetCell(cell:number) {
-        this.board.unSetCell(cell);
-    }
-
     // clearCell(cell:number) {
     //     const modified = this.board.clearCell(cell, this.candidatesChanged_Added);
     //     this.updateHiddenTupleCountForCell(cell, 1);
@@ -62,7 +53,7 @@ class BacktrackSolver {
             for (const digit of this.board.candidatesTable[cell]) {
                 this.board.setCell(cell, digit);
                 this.solveNextCell(cnum-1);
-                this.board.unSetCell(cell);
+                this.board.history.undoLastStep();
                 if (this.solutionCount > 1) break;
             }
             // this.cellsByCandidateCnt[cnum].push(cell);
@@ -77,7 +68,7 @@ class BacktrackSolver {
                 if (this.board.candidatesTable[cell].bits & bitmask) {
                     this.board.setCell(cell, digit);
                     this.solveNextCell(cnum-1);
-                    this.board.unSetCell(cell);
+                    this.board.history.undoLastStep();
                     
                     if (this.solutionCount > 1) break;
                 }
