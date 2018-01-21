@@ -3,7 +3,7 @@
 /// <reference path="SolveStep.ts" />
 /// <reference path="Observable.ts" />
 
-type RuleFn = (board:Board) => SolveStep[];
+type RuleFn = (game:Game) => SolveStep[];
 
 class Board extends Observable {
 
@@ -219,44 +219,11 @@ class Board extends Observable {
 	// 	this.candidatesTable[cell].solved();
 	// }
 
-	runRule(ruleFn:RuleFn) {
-		const results = ruleFn(this);
-		if (results) {
-			for (const step of results) {
-                this.applySolveStep(step);
-			}
-			this.emit('stepDone');
-		}
-		return results;
-	}
-	
-	runRulesForNextStep(rules:Rule[]) {
-		for (const rule of rules) {
-			const results = this.runRule(rule.fn);
-			if (results) {
-				console.log(rule.name + ' - ' + results.join(';') + ' solved: ' + this.numCellsSolved);
-				this.render();
-				return;
-			}
-		}
-		console.log('No rule matched');
-	}
 
     getEmptyCells() {
         const cells = [];
         for (let idx = 0; idx < 81; ++idx) if (this.table[idx] === 0) cells.push(idx);
         return cells;
-    }
-
-    runRulesUntilDone(rules:Rule[]) {
-        for (let i = 0; i < rules.length;) {
-            if (this.runRule(rules[i].fn)) {
-                if (this.numCellsSolved === 81) return;
-                i = 0;
-            } else {
-                ++i;
-            }
-        }
     }
 
     areCandidatesValid():boolean {

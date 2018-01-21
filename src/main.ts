@@ -14,7 +14,7 @@ const measure = (fn) => {
 }
 
 let generator = new Generator($('#container'));
-let game:Game = new Game($('#container'));
+let game:Game = new Game($('#container'), rules);
 
 const loadSelect = $('#loadTable');
 
@@ -33,7 +33,7 @@ $('#undoBtn').addEventListener('click', () => {
     game.history.undoLastStep();
     game.render();
 });
-$('#nextBtn').addEventListener('click', () => game.board.runRulesForNextStep(rules));
+$('#nextBtn').addEventListener('click', () => game.runRulesForNextStep());
 
 $('#backtrackBtn').addEventListener('click', () => {
     let solutions, calls;
@@ -57,7 +57,7 @@ $('#generateBtn').addEventListener('click', () => {
 $('#rulesAndSolveBtn').addEventListener('click', () => {
     let solutions, calls;
     let time = measure(() => {
-        game.board.runRulesUntilDone(rules);
+        game.runRulesUntilDone();
         let solver = game.solver;
         solutions = solver.solve();    
         calls = solver.callCounter;

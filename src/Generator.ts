@@ -9,7 +9,7 @@ class Generator {
     private game:Game;
 
     generate(rules:Rule[]):Game {
-        this.game = new Game(this.container);
+        this.game = new Game(this.container, rules);
 
         this.tryAddNextClue();
         // this.tryRemoveClues();

@@ -6,28 +6,30 @@ class Rule {
 }
 
 const rules = [
-	new Rule('Naked Single', (board) => {
+	new Rule('Naked Single', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 		for (let i = 0; i < 81; ++i) {
-			const candidates = board.candidatesTable[i];
+			const candidates = candidatesTable[i];
 			if (candidates.count === 1) {
 				for (const digit of candidates) return [new Solve(i, digit)]; // solve cell 'i' with 'digit'
 			}
 		}
 	}),
-	new Rule('Hidden Single', (board) => {
+	new Rule('Hidden Single', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 		for (const {name, blocks} of blockTypes) for (const block of blocks) {
 			const digitCount = [0,0,0,0,0,0,0,0,0,0];
 			const seenIdx:number[] = [];
 			for (const cell of block) {
-				for (const digit of board.candidatesTable[cell]) { digitCount[digit]++; seenIdx[digit] = cell; }
+				for (const digit of candidatesTable[cell]) { digitCount[digit]++; seenIdx[digit] = cell; }
 			}
 			for (let digit = 1; digit <= 9; ++digit) {
 				if (digitCount[digit] === 1) return [new Solve(seenIdx[digit], digit, name)];
 			}
 		}
 	}),
-	new Rule('Naked Pair', (board) => {
-		const candidatesTable = board.candidatesTable;
+	new Rule('Naked Pair', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 		for (const {name, blocks} of blockTypes) for (const block of blocks) {
 			const pairs = {};
 			for (const cell of block) {
@@ -50,8 +52,8 @@ const rules = [
 			}
 		}
 	}),
-	new Rule('Hidden Pair', (board) => {
-		const candidatesTable = board.candidatesTable;
+	new Rule('Hidden Pair', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 		for (const {name, blocks} of blockTypes) for (const block of blocks) {
 			const found2exactly = {};	// map[idx1+'_'+idx2] = digit;
 			for (let digit = 1, bitmask = 1; digit <= 9; ++digit, bitmask <<= 1) {
@@ -85,8 +87,8 @@ const rules = [
 			}
 		}
 	}),
-	new Rule('Naked Triple', (board) => {
-		const candidatesTable = board.candidatesTable;
+	new Rule('Naked Triple', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 		for (const {name, blocks} of blockTypes) for (const block of blocks) {
 			const triples = new ExtMap<number, ExtArray<number>>(() => new ExtArray<number>());
 			
@@ -116,8 +118,8 @@ const rules = [
 			}
 		}
 	}),
-	new Rule('Hidden Triple', (board) => {
-		const candidatesTable = board.candidatesTable;
+	new Rule('Hidden Triple', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 		for (const {name, blocks} of blockTypes) for (const block of blocks) {
 			const triples = new ExtMap<string, ExtArray<number>>(() => new ExtArray<number>()); // ["p1_p2_p3"] = [digit1, digit2, ...]
 
@@ -158,8 +160,8 @@ const rules = [
 			}
 		}
 	}),
-	new Rule('Locked Candidate', (board) => {
-		const candidatesTable = board.candidatesTable;
+	new Rule('Locked Candidate', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 
 		function processBlocks(blockType:BlockType, against:BlockType[]) {
 			for (const block of blockType.blocks) {
@@ -196,8 +198,8 @@ const rules = [
 
 		return processBlocks(box, [row, col]) || processBlocks(row, [box]) || processBlocks(col, [box]);
 	}),
-	new Rule('X-Wing', (board) => {
-		const candidatesTable = board.candidatesTable;
+	new Rule('X-Wing', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 
 		function findXWing(baseBlk:BlockType, coverBlks:BlockType[]) {
 			for (let digit = 1; digit <= 9; ++digit) {
@@ -229,8 +231,8 @@ const rules = [
 
 		return findXWing(row, [col, box]) || findXWing(col, [row, box]) || findXWing(box, [row, col]);
 	}),
-	new Rule('Swordfish', (board) => {
-		const candidatesTable = board.candidatesTable;
+	new Rule('Swordfish', (game) => {
+		const candidatesTable = game.board.candidatesTable;
 
 		function findSwordfish(baseBlk:BlockType, coverBlk:BlockType) {
 			for (let digit = 1; digit <= 9; ++digit) {

@@ -2,6 +2,7 @@
 /// <reference path="BacktrackSolver.ts" />
 /// <reference path="CandidatePositions.ts" />
 /// <reference path="BoardHistory.ts" />
+/// <reference path="Rule.ts" />
 
 class Game {
     public board: Board;
@@ -10,7 +11,7 @@ class Game {
     public cellsByCandidateCount: CellsByCandidateCount;
     public candidatePositions: CandidatePositions;
 
-    constructor(private container:HTMLElement) {
+    constructor(private container:HTMLElement, private rules:Rule[]) {
         this.loadTable();
     }
 
@@ -25,6 +26,40 @@ class Game {
 
     render(container?:HTMLElement) {
         this.board.render(this.container = container || this.container);
+    }
+
+    runRule(ruleFn:RuleFn) {
+		const results = ruleFn(this);
+		if (results) {
+			for (const step of results) {
+                this.board.applySolveStep(step);
+			}
+			this.board.emit('stepDone');
+		}
+		return results;
+    }
+    
+    runRulesForNextStep() {
+		for (const rule of this.rules) {
+			const results = this.runRule(rule.fn);
+			if (results) {
+				console.log(rule.name + ' - ' + results.join(';') + ' solved: ' + this.board.numCellsSolved);
+				this.render();
+				return;
+			}
+		}
+		console.log('No rule matched');
+    }
+    
+    runRulesUntilDone() {
+        for (let i = 0; i < this.rules.length;) {
+            if (this.runRule(this.rules[i].fn)) {
+                if (this.board.numCellsSolved === 81) return;
+                i = 0;
+            } else {
+                ++i;
+            }
+        }
     }
 
     destroy() {

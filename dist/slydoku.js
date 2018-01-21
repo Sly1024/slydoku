@@ -358,45 +358,12 @@ class Board extends Observable {
     // 	}
     // 	this.candidatesTable[cell].solved();
     // }
-    runRule(ruleFn) {
-        const results = ruleFn(this);
-        if (results) {
-            for (const step of results) {
-                this.applySolveStep(step);
-            }
-            this.emit('stepDone');
-        }
-        return results;
-    }
-    runRulesForNextStep(rules) {
-        for (const rule of rules) {
-            const results = this.runRule(rule.fn);
-            if (results) {
-                console.log(rule.name + ' - ' + results.join(';') + ' solved: ' + this.numCellsSolved);
-                this.render();
-                return;
-            }
-        }
-        console.log('No rule matched');
-    }
     getEmptyCells() {
         const cells = [];
         for (let idx = 0; idx < 81; ++idx)
             if (this.table[idx] === 0)
                 cells.push(idx);
         return cells;
-    }
-    runRulesUntilDone(rules) {
-        for (let i = 0; i < rules.length;) {
-            if (this.runRule(rules[i].fn)) {
-                if (this.numCellsSolved === 81)
-                    return;
-                i = 0;
-            }
-            else {
-                ++i;
-            }
-        }
     }
     areCandidatesValid() {
         for (let i = 0; i < 81; ++i) {
@@ -470,22 +437,24 @@ class Rule {
     }
 }
 const rules = [
-    new Rule('Naked Single', (board) => {
+    new Rule('Naked Single', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         for (let i = 0; i < 81; ++i) {
-            const candidates = board.candidatesTable[i];
+            const candidates = candidatesTable[i];
             if (candidates.count === 1) {
                 for (const digit of candidates)
                     return [new Solve(i, digit)]; // solve cell 'i' with 'digit'
             }
         }
     }),
-    new Rule('Hidden Single', (board) => {
+    new Rule('Hidden Single', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         for (const { name, blocks } of blockTypes)
             for (const block of blocks) {
                 const digitCount = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
                 const seenIdx = [];
                 for (const cell of block) {
-                    for (const digit of board.candidatesTable[cell]) {
+                    for (const digit of candidatesTable[cell]) {
                         digitCount[digit]++;
                         seenIdx[digit] = cell;
                     }
@@ -496,8 +465,8 @@ const rules = [
                 }
             }
     }),
-    new Rule('Naked Pair', (board) => {
-        const candidatesTable = board.candidatesTable;
+    new Rule('Naked Pair', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         for (const { name, blocks } of blockTypes)
             for (const block of blocks) {
                 const pairs = {};
@@ -522,8 +491,8 @@ const rules = [
                 }
             }
     }),
-    new Rule('Hidden Pair', (board) => {
-        const candidatesTable = board.candidatesTable;
+    new Rule('Hidden Pair', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         for (const { name, blocks } of blockTypes)
             for (const block of blocks) {
                 const found2exactly = {}; // map[idx1+'_'+idx2] = digit;
@@ -560,8 +529,8 @@ const rules = [
                 }
             }
     }),
-    new Rule('Naked Triple', (board) => {
-        const candidatesTable = board.candidatesTable;
+    new Rule('Naked Triple', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         for (const { name, blocks } of blockTypes)
             for (const block of blocks) {
                 const triples = new ExtMap(() => new ExtArray());
@@ -593,8 +562,8 @@ const rules = [
                 }
             }
     }),
-    new Rule('Hidden Triple', (board) => {
-        const candidatesTable = board.candidatesTable;
+    new Rule('Hidden Triple', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         for (const { name, blocks } of blockTypes)
             for (const block of blocks) {
                 const triples = new ExtMap(() => new ExtArray()); // ["p1_p2_p3"] = [digit1, digit2, ...]
@@ -639,8 +608,8 @@ const rules = [
                 }
             }
     }),
-    new Rule('Locked Candidate', (board) => {
-        const candidatesTable = board.candidatesTable;
+    new Rule('Locked Candidate', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         function processBlocks(blockType, against) {
             for (const block of blockType.blocks) {
                 const digitPos = Array.from(Array(9), () => []);
@@ -676,8 +645,8 @@ const rules = [
         }
         return processBlocks(box, [row, col]) || processBlocks(row, [box]) || processBlocks(col, [box]);
     }),
-    new Rule('X-Wing', (board) => {
-        const candidatesTable = board.candidatesTable;
+    new Rule('X-Wing', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         function findXWing(baseBlk, coverBlks) {
             for (let digit = 1; digit <= 9; ++digit) {
                 const digitMask = 1 << digit - 1;
@@ -714,8 +683,8 @@ const rules = [
         }
         return findXWing(row, [col, box]) || findXWing(col, [row, box]) || findXWing(box, [row, col]);
     }),
-    new Rule('Swordfish', (board) => {
-        const candidatesTable = board.candidatesTable;
+    new Rule('Swordfish', (game) => {
+        const candidatesTable = game.board.candidatesTable;
         function findSwordfish(baseBlk, coverBlk) {
             for (let digit = 1; digit <= 9; ++digit) {
                 const digitMask = 1 << digit - 1;
@@ -964,9 +933,11 @@ class BoardHistory {
 /// <reference path="BacktrackSolver.ts" />
 /// <reference path="CandidatePositions.ts" />
 /// <reference path="BoardHistory.ts" />
+/// <reference path="Rule.ts" />
 class Game {
-    constructor(container) {
+    constructor(container, rules) {
         this.container = container;
+        this.rules = rules;
         this.loadTable();
     }
     loadTable(table) {
@@ -980,6 +951,39 @@ class Game {
     render(container) {
         this.board.render(this.container = container || this.container);
     }
+    runRule(ruleFn) {
+        const results = ruleFn(this);
+        if (results) {
+            for (const step of results) {
+                this.board.applySolveStep(step);
+            }
+            this.board.emit('stepDone');
+        }
+        return results;
+    }
+    runRulesForNextStep() {
+        for (const rule of this.rules) {
+            const results = this.runRule(rule.fn);
+            if (results) {
+                console.log(rule.name + ' - ' + results.join(';') + ' solved: ' + this.board.numCellsSolved);
+                this.render();
+                return;
+            }
+        }
+        console.log('No rule matched');
+    }
+    runRulesUntilDone() {
+        for (let i = 0; i < this.rules.length;) {
+            if (this.runRule(this.rules[i].fn)) {
+                if (this.board.numCellsSolved === 81)
+                    return;
+                i = 0;
+            }
+            else {
+                ++i;
+            }
+        }
+    }
     destroy() {
         this.cellsByCandidateCount.destroy();
     }
@@ -992,7 +996,7 @@ class Generator {
         this.container = container;
     }
     generate(rules) {
-        this.game = new Game(this.container);
+        this.game = new Game(this.container, rules);
         this.tryAddNextClue();
         // this.tryRemoveClues();
         return this.game;
@@ -1066,7 +1070,7 @@ const measure = (fn) => {
     return performance.now() - time;
 };
 let generator = new Generator($('#container'));
-let game = new Game($('#container'));
+let game = new Game($('#container'), rules);
 const loadSelect = $('#loadTable');
 Object.keys(sampleTables).forEach(key => loadSelect.options.add(new Option(key, key)));
 loadSelect.addEventListener('change', () => {
@@ -1080,7 +1084,7 @@ $('#undoBtn').addEventListener('click', () => {
     game.history.undoLastStep();
     game.render();
 });
-$('#nextBtn').addEventListener('click', () => game.board.runRulesForNextStep(rules));
+$('#nextBtn').addEventListener('click', () => game.runRulesForNextStep());
 $('#backtrackBtn').addEventListener('click', () => {
     let solutions, calls;
     let time = measure(() => {
@@ -1101,7 +1105,7 @@ $('#generateBtn').addEventListener('click', () => {
 $('#rulesAndSolveBtn').addEventListener('click', () => {
     let solutions, calls;
     let time = measure(() => {
-        game.board.runRulesUntilDone(rules);
+        game.runRulesUntilDone();
         let solver = game.solver;
         solutions = solver.solve();
         calls = solver.callCounter;
