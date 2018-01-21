@@ -30,7 +30,7 @@ loadSelect.dispatchEvent(new Event('change'))
 $('#validateBtn').addEventListener('click', () => game.board.checkValidity());
 
 $('#undoBtn').addEventListener('click', () => {
-    game.board.history.undoLastStep();
+    game.history.undoLastStep();
     game.render();
 });
 $('#nextBtn').addEventListener('click', () => game.board.runRulesForNextStep(rules));

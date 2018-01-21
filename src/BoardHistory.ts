@@ -9,7 +9,7 @@ class BoardHistory {
     private observer: Observer = new Observer();
 
     constructor(private board:Board) {
-        this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet');
+        this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet', 'stepDone');
     }
 
     candidatesChanged(cell:number, oldC:Candidates, newC:Candidates, bitmask:number, add:boolean) {
@@ -20,7 +20,7 @@ class BoardHistory {
         this.recorded.push(['s', cell, oldC.bits, false]);
     }
 
-    markStepDone() {
+    stepDone() {
         if (this.recorded.length) {            
             this.steps.push(this.recorded);
             this.recorded = [];

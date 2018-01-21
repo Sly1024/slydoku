@@ -2,8 +2,6 @@
 /// <reference path="BlockType.ts" />
 /// <reference path="SolveStep.ts" />
 /// <reference path="Observable.ts" />
-/// <reference path="BoardHistory.ts" />
-
 
 type RuleFn = (board:Board) => SolveStep[];
 
@@ -14,7 +12,6 @@ class Board extends Observable {
     public candidatesTable: Candidates[];
 	public numCellsSolved:number;
 	public modifiedCandidates:number[];
-	public history:BoardHistory;
 
 	constructor(board?:string|number[]|Board) {
 		super();
@@ -23,11 +20,9 @@ class Board extends Observable {
 			this.container = board.container;
 			this.candidatesTable = board.candidatesTable.map(candi => candi.clone());
 			this.numCellsSolved = board.numCellsSolved;
-			this.history = board.history.clone(this);
         } else {
 			this.table = this.checkTableErrors(board) || Array(9*9).fill(0);
 			this.calcCandidates();
-			this.history = new BoardHistory(this);
         }
 	}
 
@@ -164,7 +159,7 @@ class Board extends Observable {
 		}
 
 		candidates.solved();
-		this.history.markStepDone();
+		this.emit('stepDone');
 	}
 	
 	unSetCell(cell:number, bits:number) {
@@ -230,7 +225,7 @@ class Board extends Observable {
 			for (const step of results) {
                 this.applySolveStep(step);
 			}
-			this.history.markStepDone();
+			this.emit('stepDone');
 		}
 		return results;
 	}

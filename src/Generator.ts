@@ -17,12 +17,13 @@ class Generator {
     }
 
     tryAddNextClue() {
-        const solver = this.game.solver;
-        const board = this.game.board;
-        const candidatesTable = this.game.board.candidatesTable;
+        const game = this.game;
+        const solver = game.solver;
+        const board = game.board;
+        const candidatesTable = board.candidatesTable;
         for (let cnum = 9; cnum >= 1; --cnum) {
-            if (this.game.cellsByCandidateCount[cnum].length === 0) continue;
-            const cells = solver.cellsByCandidateCnt[cnum].slice();
+            if (game.cellsByCandidateCount[cnum].length === 0) continue;
+            const cells = game.cellsByCandidateCount[cnum].slice();
             this.randomizePermutation(cells);
             for (const cell of cells) {
                 const candidates = [...candidatesTable[cell]];
@@ -34,7 +35,7 @@ class Generator {
                     if (solutions > 1) {
                         if (this.tryAddNextClue()) return true;
                     }
-                    board.history.undoLastStep();
+                    game.history.undoLastStep();
                 }
             }
         }
