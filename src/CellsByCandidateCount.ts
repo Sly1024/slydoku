@@ -13,23 +13,23 @@ class CellsByCandidateCount extends Array<ExtArray<number>> {
         this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet', 'cellUnset');
     }
 
-    fillTable() {
+    private fillTable() {
         const candidatesTable = this.board.candidatesTable;
         let i;
         for (i = 0; i < 81; ++i) if (!this.board.table[i]) this[candidatesTable[i].count].push(i);
     }
 
-    candidatesChanged(cell:number, oldCandidates:Candidates, newCandidates:Candidates) {
+    private candidatesChanged(cell:number, oldCandidates:Candidates, newCandidates:Candidates) {
         this[oldCandidates.count].remove(cell);
         this[newCandidates.count].push(cell);
     }
 
-    cellSet(cell:number, digit:number, oldCandidates:Candidates) {
+    private cellSet(cell:number, digit:number, oldCandidates:Candidates) {
         // when this event is fired, the candidatesTable still contains the unchanged value (count)
         this[oldCandidates.count].remove(cell);
     }
 
-    cellUnset(cell:number, digit:number, newCandidates:Candidates) {
+    private cellUnset(cell:number, digit:number, newCandidates:Candidates) {
         // when this event is fired, the candidatesTable contains the new value (count)
         this[newCandidates.count].push(cell);
     }

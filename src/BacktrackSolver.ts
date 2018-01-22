@@ -61,9 +61,7 @@ class BacktrackSolver {
             // this.cellsByCandidateCnt[cnum].push(cell);
         } else {
             const pKey = game.candidatePositions.byCount[pnum][0];
-            const digit = (pKey % 9) + 1;
-            const bIdx = (pKey/9|0) % 9;
-            const btIdx = pKey/81|0;
+            const [btIdx, bIdx, digit] = CandidatePositions.key2Idx(pKey);
             const bitmask = 1<<digit-1;
 
             for (const cell of blockTypes[btIdx].blocks[bIdx]) {

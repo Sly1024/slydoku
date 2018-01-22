@@ -7,47 +7,44 @@ class Rule {
 
 const rules = [
 	new Rule('Naked Single', (game) => {
-		const candidatesTable = game.board.candidatesTable;
-		for (let i = 0; i < 81; ++i) {
-			const candidates = candidatesTable[i];
-			if (candidates.count === 1) {
-				for (const digit of candidates) return [new Solve(i, digit)]; // solve cell 'i' with 'digit'
-			}
+		const list = game.cellsByCandidateCount[1];
+		if (list.length) {
+			const cell: number = list[0];
+			const digit = game.board.candidatesTable[cell].getNthCandidate(0);
+			return [new Solve(cell, digit)];
 		}
 	}),
 	new Rule('Hidden Single', (game) => {
-		const candidatesTable = game.board.candidatesTable;
-		for (const {name, blocks} of blockTypes) for (const block of blocks) {
-			const digitCount = [0,0,0,0,0,0,0,0,0,0];
-			const seenIdx:number[] = [];
-			for (const cell of block) {
-				for (const digit of candidatesTable[cell]) { digitCount[digit]++; seenIdx[digit] = cell; }
-			}
-			for (let digit = 1; digit <= 9; ++digit) {
-				if (digitCount[digit] === 1) return [new Solve(seenIdx[digit], digit, name)];
-			}
+		const list = game.candidatePositions.byCount[1];
+		if (list.length) {
+			const posKey = list[0];
+			const [btIdx, bIdx, digit] = CandidatePositions.key2Idx(posKey);
+			const cell = game.candidatePositions.positions[posKey][0];
+			return [new Solve(cell, digit, blockTypes[btIdx].name)];
 		}
 	}),
 	new Rule('Naked Pair', (game) => {
 		const candidatesTable = game.board.candidatesTable;
-		for (const {name, blocks} of blockTypes) for (const block of blocks) {
-			const pairs = {};
-			for (const cell of block) {
-				const {count, bits} = candidatesTable[cell];
-				if (count === 2) {
-					let otherCell:number;
-					if ((otherCell = pairs[bits]) !== undefined) {
-						// pair(idx, otherIdx) found
-						const removes:SolveStep[] = [];
-						for (const tidx of block) {
-							let removeBits;
-							if (tidx !== cell && tidx !== otherCell && (removeBits = candidatesTable[tidx].bits & bits)) {
-								removes.push(new Remove(tidx, removeBits, name));
-							}
+		const pairs = {};
+		for (const cell of game.cellsByCandidateCount[2]) {
+			const bits = candidatesTable[cell].bits;
+			for (let btIdx = 0; btIdx < 3; ++btIdx) {
+				const blockType = blockTypes[btIdx];
+				const blkIdx = blockType.getIdx(cell);
+				const key = (btIdx << 13) | (blkIdx << 9) | bits;
+				let otherCell:number;
+				if ((otherCell = pairs[key]) !== undefined) {
+					// pair(cell, otherCell) found
+					const removes:SolveStep[] = [];
+					for (const tidx of blockType.blocks[blkIdx]) {
+						let removeBits;
+						if (tidx !== cell && tidx !== otherCell && (removeBits = candidatesTable[tidx].bits & bits)) {
+							removes.push(new Remove(tidx, removeBits, name));
 						}
-						if (removes.length) return removes;
 					}
-					pairs[bits] = cell;
+					if (removes.length) return removes;
+				} else {
+					pairs[key] = cell;
 				}
 			}
 		}

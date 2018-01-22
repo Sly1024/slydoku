@@ -3,9 +3,10 @@
 
 class CandidatePositions {
     
+    // key = # of positions, value = posKey
     public byCount:ExtArray<number>[] = [];
 
-    // key = blockTypeIdx*81 + blockIdx*9 + digit-1
+    // key = blockTypeIdx*81 + blockIdx*9 + digit-1, value = cellIdx
     public positions:ExtArray<number>[];
 
     private observer:Observer = new Observer();
@@ -13,6 +14,13 @@ class CandidatePositions {
     constructor(private board:Board) {
         this.fillTable();
         this.observer.observeAndCall(board, this, 'candidatesChanged', 'cellSet', 'cellUnset');
+    }
+
+    public static key2Idx(posKey:number) {
+        const btIdx = posKey/81|0;
+        const bIdx = (posKey/9|0) % 9;
+        const digit = (posKey % 9) + 1;
+        return [btIdx, bIdx, digit];
     }
 
     private fillTable() {
@@ -36,7 +44,7 @@ class CandidatePositions {
         }
     }
 
-    candidatesChanged(cell:number, oldCandidates:Candidates, newCandidates:Candidates) {
+    private candidatesChanged(cell:number, oldCandidates:Candidates, newCandidates:Candidates) {
         const changedBits = oldCandidates.bits ^ newCandidates.bits;
         const added = oldCandidates.count < newCandidates.count;
         const digits = [...Candidates.prototype[Symbol.iterator].call({bits:changedBits})];
@@ -55,11 +63,11 @@ class CandidatePositions {
         }
     }
 
-    cellSet(cell:number, digit:number, oldCandidates:Candidates) {
+    private cellSet(cell:number, digit:number, oldCandidates:Candidates) {
         this.candidatesChanged(cell, oldCandidates, new Candidates(0, 0));
     }
 
-    cellUnset(cell:number, digit:number, newCandidates:Candidates) {
+    private cellUnset(cell:number, digit:number, newCandidates:Candidates) {
         this.candidatesChanged(cell, new Candidates(0, 0), newCandidates);
     }
 
